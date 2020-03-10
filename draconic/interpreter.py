@@ -1,62 +1,26 @@
 import ast
-import operator as op
 
+from .config import DraconicConfig
 from .exceptions import *
+from .helpers import OperatorMixin
 
-__all__ = (
-    "MAX_CONST_LEN", "MAX_LOOPS", "MAX_STATEMENTS", "MAX_POWER_BASE", "MAX_POWER", "DISALLOW_PREFIXES",
-    "DISALLOW_METHODS", "DEFAULT_FUNCTIONS", "BaseInterpreter", "Interpreter"
-)
-
-# ===== configuration constants ======
-MAX_CONST_LEN = 100000
-MAX_LOOPS = 10000
-MAX_STATEMENTS = 100000
-MAX_POWER_BASE = 1000000
-MAX_POWER = 1000  # highest exponent
-DISALLOW_PREFIXES = ['_', 'func_']
-DISALLOW_METHODS = ['format', 'format_map', 'mro']
-DEFAULT_FUNCTIONS = {"int": int, "float": float, "str": str, "dict": dict, "tuple": tuple, "list": list, "set": set}
-
-
-# ===== operation overrides =====
-def safe_power(a, b):
-    """ a limited exponent/to-the-power-of function, for safety reasons """
-
-    if abs(a) > MAX_POWER_BASE or abs(b) > MAX_POWER:
-        raise NumberTooHigh(f"{a} ** {b} is too large of an exponent")
-    return a ** b
-
-
-def safe_mult(a, b):
-    """ limit the number of times an iterable can be repeated... """
-
-    if hasattr(a, '__len__') and b * len(a) > MAX_CONST_LEN:
-        raise IterableTooLong('Multiplying these two would create something too long')
-    if hasattr(b, '__len__') and a * len(b) > MAX_CONST_LEN:
-        raise IterableTooLong('Multiplying these two would create something too long')
-
-    return a * b
-
-
-def safe_add(a, b):
-    """ iterable length limit again """
-
-    if hasattr(a, '__len__') and hasattr(b, '__len__'):
-        if len(a) + len(b) > MAX_CONST_LEN:
-            raise IterableTooLong("Adding these two would create something too long")
-    return a + b
+__all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
 
 # ===== single-line evaluator, noncompound types, etc =====
-class BaseInterpreter:
-    def __init__(self, builtins=None):
-        """
-            Create the evaluator instance.  Set up valid operators (+,-, etc)
-            functions (add, random, get_val, whatever) and names. """
+class SimpleInterpreter(OperatorMixin):
+    """A simple interpreter capable of evaluating expressions. No compound types or assignments."""
 
+    def __init__(self, builtins=None, config=None):
+        if config is None:
+            config = DraconicConfig()
         if builtins is None:
-            builtins = DEFAULT_FUNCTIONS.copy()
+            builtins = {}
+
+        super().__init__(config)
+
+        if config.builtins_extend_default:
+            builtins = {**config.default_names, **builtins}
 
         self.builtins = builtins
 
@@ -69,10 +33,6 @@ class BaseInterpreter:
             ast.FormattedValue: self._eval_formattedvalue,  # formatted value in f-string
             ast.JoinedStr: self._eval_joinedstr,  # f-string
             ast.NameConstant: self._eval_constant,  # True/False/None up to py3.7
-            ast.Dict: self._eval_dict,
-            ast.Tuple: self._eval_tuple,
-            ast.List: self._eval_list,
-            ast.Set: self._eval_set,
             # names:
             ast.Name: self._eval_name,
             # ops:
@@ -90,40 +50,7 @@ class BaseInterpreter:
             ast.Slice: self._eval_slice,
             # container.key:
             ast.Attribute: self._eval_attribute,
-            # comprehensions:
-            ast.ListComp: self._eval_listcomp,
-            ast.SetComp: self._eval_setcomp,
-            ast.DictComp: self._eval_dictcomp,
-            ast.GeneratorExp: self._eval_generatorexp,
         }
-
-        self.operators = {
-            # binary
-            ast.Add: safe_add,
-            ast.Sub: op.sub,
-            ast.Mult: safe_mult,
-            ast.Div: op.truediv,
-            ast.FloorDiv: op.floordiv,
-            ast.Pow: safe_power,
-            ast.Mod: op.mod,
-            # unary
-            ast.Not: op.not_,
-            ast.USub: op.neg,
-            ast.UAdd: op.pos,
-            # comparison
-            ast.Eq: op.eq,
-            ast.NotEq: op.ne,
-            ast.Gt: op.gt,
-            ast.Lt: op.lt,
-            ast.GtE: op.ge,
-            ast.LtE: op.le,
-            ast.In: lambda x, y: op.contains(y, x),
-            ast.NotIn: lambda x, y: not op.contains(y, x),
-            ast.Is: lambda x, y: x is y,
-            ast.IsNot: lambda x, y: x is not y,
-        }
-
-        self._loops = 0
 
     @staticmethod
     def parse(expr):
@@ -161,7 +88,7 @@ class BaseInterpreter:
 
     def _preflight(self):
         """Called before starting evaluation."""
-        self._loops = 0
+        pass
 
     @property
     def names(self):
@@ -179,16 +106,16 @@ class BaseInterpreter:
     def _eval_num(node):
         return node.n
 
-    @staticmethod
-    def _eval_str(node):
-        if len(node.s) > MAX_CONST_LEN:
-            raise IterableTooLong(f"String literal in statement is too long ({len(node.s)} > {MAX_CONST_LEN})")
+    def _eval_str(self, node):
+        if len(node.s) > self._config.max_const_len:
+            raise IterableTooLong(
+                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})")
         return node.s
 
-    @staticmethod
-    def _eval_constant(node):
-        if hasattr(node.value, '__len__') and len(node.value) > MAX_CONST_LEN:
-            raise IterableTooLong(f"Literal in statement is too long ({len(node.value)} > {MAX_CONST_LEN})")
+    def _eval_constant(self, node):
+        if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
+            raise IterableTooLong(
+                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})")
         return node.value
 
     def _eval_unaryop(self, node):
@@ -252,11 +179,11 @@ class BaseInterpreter:
             raise
 
     def _eval_attribute(self, node):
-        for prefix in DISALLOW_PREFIXES:
+        for prefix in self._config.disallow_prefixes:
             if node.attr.startswith(prefix):
-                raise FeatureNotAvailable("Access to __attributes  or func_ attributes is not available")
-        if node.attr in DISALLOW_METHODS:
-            raise FeatureNotAvailable(f"The {node.attr} method is not allowed")
+                raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed")
+        if node.attr in self._config.disallow_methods:
+            raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed")
         # eval node
         node_evaluated = self._eval(node.value)
 
@@ -293,8 +220,9 @@ class BaseInterpreter:
         evaluated_values = []
         for n in node.values:
             val = str(self._eval(n))
-            if len(val) + length > MAX_CONST_LEN:
-                raise IterableTooLong("Sorry, I will not evaluate something this long.")
+            length += len(val)
+            if length > self._config.max_const_len:
+                raise IterableTooLong(f"f-string in statement is too long ({length} > {self._config.max_const_len})")
             evaluated_values.append(val)
         return ''.join(evaluated_values)
 
@@ -304,6 +232,106 @@ class BaseInterpreter:
             return fmt.format(self._eval(node.value))
         return self._eval(node.value)
 
+
+# ===== multiple-line execution, assignment, compound types =====
+class DraconicInterpreter(SimpleInterpreter):
+    """The Draconic interpreter. Capable of running Draconic code."""
+
+    class _FinalValue:
+        def __init__(self, value):
+            self.value = value
+
+    class _Return(BaseException):
+        """We propogate a ``return`` up by using a custom exception."""
+
+        def __init__(self, retval):
+            self.value = retval
+
+    class _Break(BaseException):
+        pass
+
+    class _Continue(BaseException):
+        pass
+
+    def __init__(self, builtins=None, config=None):
+        super(DraconicInterpreter, self).__init__(builtins, config)
+
+        self.nodes.update({
+            # compound types:
+            ast.Dict: self._eval_dict,
+            ast.Tuple: self._eval_tuple,
+            ast.List: self._eval_list,
+            ast.Set: self._eval_set,
+            # comprehensions:
+            ast.ListComp: self._eval_listcomp,
+            ast.SetComp: self._eval_setcomp,
+            ast.DictComp: self._eval_dictcomp,
+            ast.GeneratorExp: self._eval_generatorexp,
+            # assignments:
+            ast.Assign: self._eval_assign,
+            ast.AugAssign: self._eval_augassign,
+            self._FinalValue: lambda v: v.value,
+            # control:
+            ast.Return: self._exec_return,
+            ast.If: self._exec_if,
+            ast.For: self._exec_for,
+            ast.While: self._exec_while,
+            ast.Break: self._exec_break,
+            ast.Continue: self._exec_continue,
+            ast.Pass: lambda node: None
+        })
+
+        self.assign_nodes = {
+            ast.Name: self._assign_name,
+            ast.Tuple: self._assign_unpack,
+            ast.List: self._assign_unpack,
+            ast.Subscript: self._assign_subscript,
+            # no assigning to attributes
+        }
+
+        self._num_stmts = 0
+        self._loops = 0
+        self._names = {}
+
+    def execute(self, expr):
+        """
+        Executes an AST body.
+
+        :type expr: str or list[ast.AST]
+        """
+        if not isinstance(expr, list):
+            expr = self.parse(expr)
+
+        self._preflight()
+        return self._exec(expr)
+
+    def _preflight(self):
+        self._num_stmts = 0
+        super()._preflight()
+
+    def _eval(self, node):
+        self._num_stmts += 1
+        if self._num_stmts > self._config.max_statements:
+            raise TooManyStatements("You are trying to execute too many statements.")
+
+        return super()._eval(node)
+
+    def _exec(self, body):
+        for expression in body:
+            try:
+                self._eval(expression)
+            except self._Return as r:
+                return r.value
+
+    @property
+    def names(self):
+        return {**self.builtins, **self._names}
+
+    @names.setter
+    def names(self, new_names):
+        self._names = new_names
+
+    # ===== compound types =====
     def _eval_dict(self, node):
         return {self._eval(k): self._eval(v)
                 for (k, v) in zip(node.keys, node.values)}
@@ -371,7 +399,7 @@ class BaseInterpreter:
             generator_node = comprehension_node.generators[gi]
             for i in self._eval(generator_node.iter):
                 self._loops += 1
-                if self._loops > MAX_LOOPS:
+                if self._loops > self._config.max_loops:
                     raise IterableTooLong('Comprehension generates too many elements')
 
                 # set names
@@ -389,92 +417,6 @@ class BaseInterpreter:
             yield from do_generator()
         finally:
             self.nodes.update({ast.Name: previous_name_evaller})
-
-
-# ===== multiple-line execution, assignment, compound types =====
-class Interpreter(BaseInterpreter):
-    class _FinalValue:
-        def __init__(self, value):
-            self.value = value
-
-    class _Return(BaseException):
-        """We propogate a ``return`` up by using a custom exception."""
-
-        def __init__(self, retval):
-            self.value = retval
-
-    class _Break(BaseException):
-        pass
-
-    class _Continue(BaseException):
-        pass
-
-    def __init__(self, builtins=None):
-        super(Interpreter, self).__init__(builtins)
-
-        self.nodes.update({
-            # assignments:
-            ast.Assign: self._eval_assign,
-            ast.AugAssign: self._eval_augassign,
-            self._FinalValue: lambda v: v.value,
-            # control:
-            ast.Return: self._exec_return,
-            ast.If: self._exec_if,
-            ast.For: self._exec_for,
-            ast.While: self._exec_while,
-            ast.Break: self._exec_break,
-            ast.Continue: self._exec_continue,
-            ast.Pass: lambda node: None
-        })
-
-        self.assign_nodes = {
-            ast.Name: self._assign_name,
-            ast.Tuple: self._assign_unpack,
-            ast.List: self._assign_unpack,
-            ast.Subscript: self._assign_subscript,
-            # no assigning to attributes
-        }
-
-        self._num_stmts = 0
-        self._names = {}
-
-    def execute(self, expr):
-        """
-        Executes an AST body.
-
-        :type expr: str or list[ast.AST]
-        """
-        if not isinstance(expr, list):
-            expr = self.parse(expr)
-
-        self._preflight()
-        return self._exec(expr)
-
-    def _preflight(self):
-        self._num_stmts = 0
-        super()._preflight()
-
-    def _eval(self, node):
-        self._num_stmts += 1
-        if self._num_stmts > MAX_STATEMENTS:
-            raise TooManyStatements("You are trying to execute too many statements.")
-
-        return super()._eval(node)
-
-    def _exec(self, body):
-        for expression in body:
-            try:
-                self._eval(expression)
-            except self._Return as r:
-                return r.value
-
-    @property
-    def names(self):
-        return {**self.builtins, **self._names}
-
-    @names.setter
-    def names(self, new_names):
-        self._names = new_names
 
     # ===== assignments =====
     def _eval_assign(self, node):
@@ -540,7 +482,7 @@ class Interpreter(BaseInterpreter):
     def _exec_for(self, node):
         for item in self._eval(node.iter):
             self._loops += 1
-            if self._loops > MAX_LOOPS:
+            if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in for block)')
 
             self._assign(node.target, self._FinalValue(value=item))
@@ -556,7 +498,7 @@ class Interpreter(BaseInterpreter):
     def _exec_while(self, node):
         while self._eval(node.test):
             self._loops += 1
-            if self._loops > MAX_LOOPS:
+            if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in while block)')
 
             try:

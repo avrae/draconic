@@ -8,8 +8,8 @@ import sys
 import unittest
 
 import draconic
-from draconic import FeatureNotAvailable, Interpreter, InvalidExpression, IterableTooLong, \
-    NotDefined, NumberTooHigh
+from draconic import DraconicInterpreter, FeatureNotAvailable, InvalidExpression, IterableTooLong, NotDefined, \
+    NumberTooHigh
 
 
 class DRYTest(unittest.TestCase):
@@ -18,7 +18,7 @@ class DRYTest(unittest.TestCase):
 
     def setUp(self):
         """ initialize a SimpleEval """
-        self.s = Interpreter()
+        self.s = DraconicInterpreter()
 
     def t(self, expr, shouldbe):  # pylint: disable=invalid-name
         """ test an evaluation of an expression against an expected answer """
@@ -192,7 +192,7 @@ class TestFunctions(DRYTest):
 
         # OK, so we can load in the default functions as well...
 
-        self.s.names = {**self.s.names, **draconic.interpreter.DEFAULT_FUNCTIONS}
+        self.s.names = {**self.s.names, **draconic.config.DEFAULT_FUNCTIONS}
 
         # now it works:
 
@@ -202,10 +202,6 @@ class TestFunctions(DRYTest):
 
     def test_methods(self):
         self.t('"WORD".lower()', 'word')
-        x = draconic.interpreter.DISALLOW_METHODS
-        draconic.interpreter.DISALLOW_METHODS = []
-        self.t('"{}:{}".format(1, 2)', '1:2')
-        draconic.interpreter.DISALLOW_METHODS = x
 
     def test_function_args_none(self):
         def foo():
@@ -276,7 +272,7 @@ class TestTryingToBreakOut(DRYTest):
 
     def test_long_running(self):
         """ exponent operations can take a long time. """
-        old_max = draconic.interpreter.MAX_POWER_BASE
+        old_max = self.s._config.max_power_base
 
         self.t("9**9**3", 9 ** 9 ** 3)
 
@@ -285,14 +281,14 @@ class TestTryingToBreakOut(DRYTest):
 
         # and does limiting work?
 
-        draconic.interpreter.MAX_POWER_BASE = 100
+        self.s._config.max_power_base = 100
 
         with self.assertRaises(NumberTooHigh):
             self.t("101**2", 0)
 
         # good, so set it back:
 
-        draconic.interpreter.MAX_POWER_BASE = old_max
+        self.s._config.max_power_base = old_max
 
     def test_encode_bignums(self):
         # thanks gk
@@ -378,15 +374,15 @@ class TestTryingToBreakOut(DRYTest):
 
         # and test for changing '_' to '__':
 
-        dis = draconic.interpreter.DISALLOW_PREFIXES
-        draconic.interpreter.DISALLOW_PREFIXES = ['func_']
+        dis = self.s._config.disallow_prefixes
+        self.s._config.disallow_prefixes = ['func_']
 
         self.t('houdini.trapdoor()', 42)
         self.t('houdini._quasi_private()', 84)
 
         # and return things to normal
 
-        draconic.interpreter.DISALLOW_PREFIXES = dis
+        self.s._config.disallow_prefixes = dis
 
     def test_mro_breakout(self):
         class Blah(object):
@@ -445,15 +441,15 @@ class TestTryingToBreakOut(DRYTest):
 
             # and test for changing '_' to '__':
 
-            dis = draconic.interpreter.DISALLOW_PREFIXES
-            draconic.interpreter.DISALLOW_PREFIXES = ['func_']
+            dis = self.s._config.disallow_prefixes
+            self.s._config.disallow_prefixes = ['func_']
 
             self.t('f"{houdini.trapdoor()}"', "42")
             self.t('f"{houdini._quasi_private()}"', "84")
 
             # and return things to normal
 
-            draconic.interpreter.DISALLOW_PREFIXES = dis
+            self.s._config.disallow_prefixes = dis
 
 
 class TestCompoundTypes(DRYTest):
@@ -521,7 +517,7 @@ class TestCompoundTypes(DRYTest):
         self.t('not {0}', False)
 
     def test_use_func(self):
-        self.s = Interpreter(builtins={"list": list, "map": map, "str": str})
+        self.s = DraconicInterpreter(builtins={"list": list, "map": map, "str": str})
         self.t('list(map(str, [-1, 0, 1]))', ['-1', '0', '1'])
         with self.assertRaises(NotDefined):
             self.s.eval('list(map(bad, [-1, 0, 1]))')
@@ -531,7 +527,7 @@ class TestCompoundTypes(DRYTest):
         with self.assertRaises(FeatureNotAvailable):
             self.s.eval('str.__dict__')
 
-        self.s = Interpreter(builtins={"dir": dir, "str": str})
+        self.s = DraconicInterpreter(builtins={"dir": dir, "str": str})
         self.t('dir(str)', dir(str))
 
 
