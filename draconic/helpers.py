@@ -35,7 +35,7 @@ class DraconicConfig:
         if disallow_methods is None:
             disallow_methods = DISALLOW_METHODS
         if default_names is None:
-            default_names = self._default_functions()
+            default_names = self._default_names()
 
         self.max_const_len = max_const_len
         self.max_loops = max_loops
@@ -47,8 +47,10 @@ class DraconicConfig:
         self.default_names = default_names
         self.builtins_extend_default = builtins_extend_default
 
-    def _default_functions(self):
+    def _default_names(self):
         return {
+            "True": True, "False": False, "None": None,
+            # functions
             "int": int, "float": float, "str": str, "tuple": tuple,
             "dict": safe_dict(self), "list": safe_list(self), "set": safe_set(self)
         }
