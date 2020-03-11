@@ -53,6 +53,20 @@ def test_keywords(i, ex):
     assert ex(expr) == 7
     assert i.out__ == [5, 6, 7]
 
+    expr = """
+    i = 0
+    while True:
+        i += 1
+        if i < 5:
+            continue
+        print(i)
+        if i == 7:
+            break
+    return i
+    """
+    assert ex(expr) == 7
+    assert i.out__ == [5, 6, 7]
+
 
 def test_infinite_loops(ex):
     expr = """

@@ -74,3 +74,27 @@ def test_set(i, e):
     e("my_set.update(realset)")
     assert isinstance(e("my_set"), i._set)
     assert isinstance(e("my_set.union(realset)"), i._set)
+
+
+def test_dict(i, e):
+    i.builtins['range'] = range
+    e("long = dict((i, i) for i in range(1000))")
+    e("long2 = {i: i for i in range(1000, 2000)}")
+
+    with pytest.raises(IterableTooLong):
+        e("long.update(long2)")
+
+
+def test_that_it_still_works_right(e):
+    e("l = [1, 2]")
+    e("d = {1: 1}")
+    e("s = {1, 2}")
+
+    e("l.append(3)")
+    assert e("l") == [1, 2, 3]
+
+    e("s.add(3)")
+    assert e("s") == {1, 2, 3}
+
+    e("d.update({2: 2})")
+    assert e("d") == {1: 1, 2: 2}
