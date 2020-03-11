@@ -1,0 +1,71 @@
+import pytest
+
+from draconic.exceptions import *
+
+
+def test_if_else(i, ex):
+    expr = """
+    if 1 < 0:
+        print("true")
+    else:
+        print("false")
+    """
+
+    assert ex(expr) is None
+    assert i.out__ == ["false"]
+
+
+def test_for(i, ex):
+    expr = """
+    for i in range(5):
+        print(i)
+    print(i)
+    """
+
+    assert ex(expr) is None
+    assert i.out__ == [0, 1, 2, 3, 4, 4]
+
+
+def test_nested(i, ex):
+    expr = """
+    for i in range(5):
+        if i < 2:
+            print(f"{i} < 2")
+        elif i == 2:
+            print(f"{i} == 2")
+        else:
+            print(f"{i} > 2")
+    """
+    assert ex(expr) is None
+    assert i.out__ == ["0 < 2", "1 < 2", "2 == 2", "3 > 2", "4 > 2"]
+
+
+def test_keywords(i, ex):
+    expr = """
+    for i in range(10):
+        if i < 5:
+            continue
+        print(i)
+        if i == 7:
+            break
+    return i
+    """
+    assert ex(expr) == 7
+    assert i.out__ == [5, 6, 7]
+
+
+def test_infinite_loops(ex):
+    expr = """
+    while 1:
+        pass
+    """
+    with pytest.raises(TooManyStatements):
+        ex(expr)
+
+    expr = """
+    i = 0
+    while i < 1000000000000000:
+        i += 1
+    """
+    with pytest.raises(TooManyStatements):
+        ex(expr)

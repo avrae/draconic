@@ -11,14 +11,6 @@ def i():
     return DraconicInterpreter(config=config)
 
 
-@pytest.fixture()
-def e(i):
-    def inner(expr):
-        return i.eval(expr)
-
-    return inner
-
-
 def test_creating(i, e):
     really_long_str = 'foo' * 1000
     not_quite_as_long = 'f' * 999
