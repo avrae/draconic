@@ -464,9 +464,9 @@ class DraconicInterpreter(SimpleInterpreter):
                 try:
                     value = list(iter(value))
                 except TypeError:
-                    raise InvalidExpression("Cannot unpack non-iterable {} object".format(type(value).__name__))
+                    raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__))
                 if not len(target.elts) == len(value):
-                    raise InvalidExpression(
+                    raise DraconicValueError(
                         "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)))
                 for t, v in zip(target.elts, value):
                     do_assign(t, v)
