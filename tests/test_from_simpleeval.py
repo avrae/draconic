@@ -229,6 +229,10 @@ class TestNewFeatures(DRYTest):
 class TestTryingToBreakOut(DRYTest):
     """ Test various weird methods to break the security sandbox... """
 
+    def setUp(self):
+        super().setUp()
+        self.s._config.max_const_len = 100000
+
     def test_import(self):
         """ usual suspect. import """
         # cannot import things:

@@ -1,5 +1,6 @@
 import ast
 import operator as op
+from collections import UserList
 
 from .exceptions import *
 
@@ -13,7 +14,7 @@ DISALLOW_METHODS = ['format', 'format_map', 'mro']
 class DraconicConfig:
     """A configuration object to pass into the Draconic interpreter."""
 
-    def __init__(self, max_const_len=100000, max_loops=10000, max_statements=100000, max_power_base=1000000,
+    def __init__(self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
                  max_power=1000, disallow_prefixes=None, disallow_methods=None,
                  default_names=None, builtins_extend_default=True):
         """
@@ -118,16 +119,19 @@ def approx_len_of(obj, visited=None):
         return len(obj)
 
     if visited is None:
-        visited = {id(obj)}
+        visited = [obj]
 
     size = op.length_hint(obj)
 
+    if isinstance(obj, dict):
+        obj = obj.items()
+
     try:
         for child in iter(obj):
-            if id(child) in visited:
+            if child in visited:
                 continue
-            size += approx_len_of(child)
-            visited.add(id(child))
+            size += approx_len_of(child, visited)
+            visited.append(child)
     except TypeError:  # object is not iterable
         pass
 
@@ -139,7 +143,7 @@ def approx_len_of(obj, visited=None):
 # ... look, it works
 
 def safe_list(config):
-    class SafeList(list):
+    class SafeList(UserList):  # extends UserList so that [x] * y returns a SafeList, not a list
         def append(self, obj):
             if approx_len_of(self) + 1 > config.max_const_len:
                 raise IterableTooLong("This list is too long")
@@ -156,7 +160,7 @@ def safe_list(config):
 def safe_set(config):
     class SafeSet(set):
         def update(self, *s):
-            if approx_len_of(self) + approx_len_of(s) > config.max_const_len:
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
                 raise IterableTooLong("This set is too large")
             super().update(*s)
 
@@ -164,6 +168,11 @@ def safe_set(config):
             if approx_len_of(self) + 1 > config.max_const_len:
                 raise IterableTooLong("This set is too large")
             super().add(element)
+
+        def union(self, *s):
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+                raise IterableTooLong("This set is too large")
+            return SafeSet(super().union(*s))
 
     return SafeSet
 
