@@ -1,6 +1,6 @@
 __all__ = (
-    "InvalidExpression", "NotDefined", "FeatureNotAvailable", "DraconicValueError", "LimitException", "NumberTooHigh",
-    "IterableTooLong", "TooManyStatements"
+    "InvalidExpression", "NotDefined", "FeatureNotAvailable", "DraconicValueError", "DraconicSyntaxError",
+    "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements"
 )
 
 
@@ -21,6 +21,11 @@ class FeatureNotAvailable(InvalidExpression):
 
 class DraconicValueError(InvalidExpression):
     """Bad value passed to some function."""
+    pass
+
+
+class DraconicSyntaxError(InvalidExpression):
+    """Bad syntax."""
     pass
 
 

@@ -8,6 +8,7 @@ import sys
 import unittest
 
 import draconic
+import draconic.helpers
 from draconic import DraconicInterpreter, FeatureNotAvailable, InvalidExpression, IterableTooLong, NotDefined, \
     NumberTooHigh
 
@@ -163,42 +164,6 @@ class TestBasic(DRYTest):
 
 class TestFunctions(DRYTest):
     """ Functions for expressions to play with """
-
-    def test_load_file(self):
-        """ add in a function which loads data from an external file. """
-
-        # write to the file:
-
-        with open("testfile.txt", 'w') as f:
-            f.write("42")
-
-        # define the function we'll send to the eval'er
-
-        def load_file(filename):
-            """ load a file and return its contents """
-            with open(filename) as f2:
-                return f2.read()
-
-        # simple load:
-
-        self.s.names = {"read": load_file}
-        self.s.builtins = {}
-        self.t("read('testfile.txt')", "42")
-
-        # and we should have *replaced* the default functions. Let's check:
-
-        with self.assertRaises(NotDefined):
-            self.t("int(read('testfile.txt'))", 42)
-
-        # OK, so we can load in the default functions as well...
-
-        self.s.names = {**self.s.names, **draconic.config.DEFAULT_FUNCTIONS}
-
-        # now it works:
-
-        self.t("int(read('testfile.txt'))", 42)
-
-        os.remove('testfile.txt')
 
     def test_methods(self):
         self.t('"WORD".lower()', 'word')

@@ -1,8 +1,7 @@
 import ast
 
-from .config import DraconicConfig
 from .exceptions import *
-from .helpers import OperatorMixin
+from .helpers import DraconicConfig, OperatorMixin, safe_dict, safe_list, safe_set
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -60,7 +59,10 @@ class SimpleInterpreter(OperatorMixin):
         :type expr: str
         :rtype: list[ast.AST]
         """
-        return ast.parse(expr.strip()).body
+        try:
+            return ast.parse(expr.strip()).body
+        except SyntaxError as e:  # todo
+            raise DraconicSyntaxError(e)
 
     def eval(self, expr):
         """
@@ -289,6 +291,11 @@ class DraconicInterpreter(SimpleInterpreter):
             # no assigning to attributes
         }
 
+        # compound type helpers
+        self._list = safe_list(self._config)
+        self._set = safe_set(self._config)
+        self._dict = safe_dict(self._config)
+
         self._num_stmts = 0
         self._loops = 0
         self._names = {}
@@ -333,26 +340,25 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== compound types =====
     def _eval_dict(self, node):
-        return {self._eval(k): self._eval(v)
-                for (k, v) in zip(node.keys, node.values)}
+        return self._dict((self._eval(k), self._eval(v)) for (k, v) in zip(node.keys, node.values))
 
     def _eval_tuple(self, node):
         return tuple(self._eval(x) for x in node.elts)
 
     def _eval_list(self, node):
-        return list(self._eval(x) for x in node.elts)
+        return self._list(self._eval(x) for x in node.elts)
 
     def _eval_set(self, node):
-        return set(self._eval(x) for x in node.elts)
+        return self._set(self._eval(x) for x in node.elts)
 
     def _eval_listcomp(self, node):
-        return list(self._do_comprehension(node))
+        return self._list(self._do_comprehension(node))
 
     def _eval_setcomp(self, node):
-        return set(self._do_comprehension(node))
+        return self._set(self._do_comprehension(node))
 
     def _eval_dictcomp(self, node):
-        return dict(self._do_comprehension(node, is_dictcomp=True))
+        return self._dict(self._do_comprehension(node, is_dictcomp=True))
 
     def _eval_generatorexp(self, node):
         for item in self._do_comprehension(node):
