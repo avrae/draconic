@@ -85,16 +85,40 @@ def test_dict(i, e):
         e("long.update(long2)")
 
 
-def test_that_it_still_works_right(e):
+def test_that_it_still_works_right(i, e):
     e("l = [1, 2]")
     e("d = {1: 1}")
     e("s = {1, 2}")
 
     e("l.append(3)")
     assert e("l") == [1, 2, 3]
+    assert isinstance(i.names['l'], i._list)
 
     e("s.add(3)")
     assert e("s") == {1, 2, 3}
+    assert isinstance(i.names['s'], i._set)
 
     e("d.update({2: 2})")
     assert e("d") == {1: 1, 2: 2}
+    assert isinstance(i.names['d'], i._dict)
+
+
+def test_types(i, e):
+    # when we have a compound type as a builtin, users shouldn't be able to modify it directly...
+    i.builtins.update({'rl': [1, 2], 'rd': {1: 1, 2: 2}})
+
+    e("rl[1] = 3")
+    e("rd[2] = 3")
+
+    assert i.names['rl'] == [1, 2]
+    assert i.names['rd'] == {1: 1, 2: 2}
+
+    # but setting it to a name is fine
+    e("l = rl")
+    e("d = rd")
+
+    e("l[1] = 3")
+    e("d[2] = 3")
+
+    assert i.names['l'] == [1, 3]
+    assert i.names['d'] == {1: 1, 2: 3}

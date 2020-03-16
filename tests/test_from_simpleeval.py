@@ -635,16 +635,16 @@ class TestNames(DRYTest):
         self.assertEqual(self.s.names['a'], 200)
 
         # or assign to lists
-        self.s.names = {**self.s.names, 'b': [0]}
+        self.t("b = [0]", None)
         self.t("b[0] = 11", None)
         self.assertEqual(self.s.names['b'], [11])
 
         # and you can get items from a list:
-        self.s.names = {**self.s.names, 'b': [6, 7]}
+        self.t("b = [6, 7]", None)
         self.t("b[0] * b[1]", 42)
 
         # or from a dict
-        self.s.names = {**self.s.names, 'c': {'i': 11}}
+        self.t("c = {'i': 11}", None)
         self.t("c['i']", 11)
         self.t("c.get('i')", 11)
         self.t("c.get('j', 11)", 11)
@@ -655,7 +655,7 @@ class TestNames(DRYTest):
         self.assertTrue('b' in self.s.names['c'])
 
         # and going all 'inception' on it works too:
-        self.s.names['c']['c'] = {'c': 11}
+        self.t("c['c'] = {'c': 11}", None)
         self.t("c['c']['c'] = 21", None)
         self.assertEqual(self.s.names['c']['c']['c'], 21)
 
@@ -665,12 +665,15 @@ class TestNames(DRYTest):
 
         self.t("a.b.c*2", 84)
 
+        # no assign to attr
         with self.assertRaises(FeatureNotAvailable):
             self.t("a.b.c = 11", 11)
 
+        # assigning to key works here, but...
         self.t("a['b']['c'] = 11", None)
 
-        self.assertEqual(self.s.names['a']['b']['c'], 11)
+        # since we passed a real dict in to names, that shouldn't be modifiable by the user
+        self.assertEqual(self.s.names['a']['b']['c'], 42)
 
         with self.assertRaises(FeatureNotAvailable):
             self.t("a.d = 11", 11)

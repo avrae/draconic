@@ -324,11 +324,12 @@ class DraconicInterpreter(SimpleInterpreter):
         val = super()._eval(node)
         # ensure that it's always an instance of our safe compound types being returned
         # note: makes a copy, so the original copy won't be updated
-        if isinstance(val, list):
+        # we don't use isinstance because we're looking for very specific classes
+        if type(val) is list:
             return self._list(val)
-        elif isinstance(val, dict):
+        elif type(val) is dict:
             return self._dict(val)
-        elif isinstance(val, set):
+        elif type(val) is set:
             return self._set(val)
         return val
 
