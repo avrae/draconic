@@ -321,7 +321,16 @@ class DraconicInterpreter(SimpleInterpreter):
         if self._num_stmts > self._config.max_statements:
             raise TooManyStatements("You are trying to execute too many statements.")
 
-        return super()._eval(node)
+        val = super()._eval(node)
+        # ensure that it's always an instance of our safe compound types being returned
+        # note: makes a copy, so the original copy won't be updated
+        if isinstance(val, list):
+            return self._list(val)
+        elif isinstance(val, dict):
+            return self._dict(val)
+        elif isinstance(val, set):
+            return self._set(val)
+        return val
 
     def _exec(self, body):
         for expression in body:
