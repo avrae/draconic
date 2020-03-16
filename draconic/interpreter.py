@@ -202,7 +202,7 @@ class SimpleInterpreter(OperatorMixin):
             pass
 
         # If it is neither, raise an exception
-        raise NotDefined(f"{node.value} has no attribute {node.attr}")
+        raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}")
 
     def _eval_index(self, node):
         return self._eval(node.value)
