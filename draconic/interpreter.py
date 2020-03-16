@@ -61,7 +61,7 @@ class SimpleInterpreter(OperatorMixin):
         """
         try:
             return ast.parse(expr.strip()).body
-        except SyntaxError as e:  # todo
+        except SyntaxError as e:
             raise DraconicSyntaxError(e)
 
     def eval(self, expr):
@@ -79,14 +79,16 @@ class SimpleInterpreter(OperatorMixin):
 
     def _eval(self, node):
         """ The internal evaluator used on each node in the parsed tree. """
-
         try:
             handler = self.nodes[type(node)]
         except KeyError:
             raise FeatureNotAvailable("Sorry, {0} is not available in this "
-                                      "evaluator".format(type(node).__name__))
+                                      "evaluator".format(type(node).__name__), node)
 
-        return handler(node)
+        try:
+            return handler(node)
+        except _PostponedRaise as pr:
+            raise pr.cls(*pr.args, **pr.kwargs, node=node)
 
     def _preflight(self):
         """Called before starting evaluation."""
@@ -111,13 +113,13 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_str(self, node):
         if len(node.s) > self._config.max_const_len:
             raise IterableTooLong(
-                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})")
+                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node)
         return node.s
 
     def _eval_constant(self, node):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
-                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})")
+                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node)
         return node.value
 
     def _eval_unaryop(self, node):
@@ -170,7 +172,7 @@ class SimpleInterpreter(OperatorMixin):
         try:
             return self.names[node.id]
         except KeyError:
-            raise NotDefined(f"{node.id} is not defined")
+            raise NotDefined(f"{node.id} is not defined", node)
 
     def _eval_subscript(self, node):
         container = self._eval(node.value)
@@ -183,9 +185,9 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_attribute(self, node):
         for prefix in self._config.disallow_prefixes:
             if node.attr.startswith(prefix):
-                raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed")
+                raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node)
         if node.attr in self._config.disallow_methods:
-            raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed")
+            raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node)
         # eval node
         node_evaluated = self._eval(node.value)
 
@@ -202,7 +204,7 @@ class SimpleInterpreter(OperatorMixin):
             pass
 
         # If it is neither, raise an exception
-        raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}")
+        raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node)
 
     def _eval_index(self, node):
         return self._eval(node.value)
@@ -224,7 +226,8 @@ class SimpleInterpreter(OperatorMixin):
             val = str(self._eval(n))
             length += len(val)
             if length > self._config.max_const_len:
-                raise IterableTooLong(f"f-string in statement is too long ({length} > {self._config.max_const_len})")
+                raise IterableTooLong(f"f-string in statement is too long ({length} > {self._config.max_const_len})",
+                                      node)
             evaluated_values.append(val)
         return ''.join(evaluated_values)
 
@@ -255,8 +258,11 @@ class DraconicInterpreter(SimpleInterpreter):
     class _Continue(BaseException):
         pass
 
-    def __init__(self, builtins=None, config=None):
+    def __init__(self, builtins=None, config=None, initial_names=None):
         super(DraconicInterpreter, self).__init__(builtins, config)
+
+        if initial_names is None:
+            initial_names = {}
 
         self.nodes.update({
             # compound types:
@@ -298,7 +304,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
         self._num_stmts = 0
         self._loops = 0
-        self._names = {}
+        self._names = initial_names
 
     def execute(self, expr):
         """
@@ -319,7 +325,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _eval(self, node):
         self._num_stmts += 1
         if self._num_stmts > self._config.max_statements:
-            raise TooManyStatements("You are trying to execute too many statements.")
+            raise TooManyStatements("You are trying to execute too many statements.", node)
 
         val = super()._eval(node)
         # ensure that it's always an instance of our safe compound types being returned
@@ -416,7 +422,7 @@ class DraconicInterpreter(SimpleInterpreter):
             for i in self._eval(generator_node.iter):
                 self._loops += 1
                 if self._loops > self._config.max_loops:
-                    raise IterableTooLong('Comprehension generates too many elements')
+                    raise IterableTooLong('Comprehension generates too many elements', comprehension_node)
 
                 # set names
                 recurse_targets(generator_node.target, i)
@@ -446,17 +452,18 @@ class DraconicInterpreter(SimpleInterpreter):
         try:
             handler = self.assign_nodes[type(names)]
         except KeyError:
-            raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__))
+            raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__), names)
         return handler(names, values)
 
     def _aug_assign(self, target, oper, value):
         # transform a += 1 to a = a + 1, then we can use assign and eval
         new_value = ast.BinOp(left=target, op=oper, right=value)
+        ast.copy_location(new_value, target)
         self._assign(target, new_value)
 
     def _assign_name(self, name, value):
         if name.id in self.builtins:
-            raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).")
+            raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).", name)
         value = self._eval(value)
         self._names[name.id] = value
 
@@ -474,10 +481,10 @@ class DraconicInterpreter(SimpleInterpreter):
                 try:
                     value = list(iter(value))
                 except TypeError:
-                    raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__))
+                    raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__), names)
                 if not len(target.elts) == len(value):
                     raise DraconicValueError(
-                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)))
+                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)), names)
                 for t, v in zip(target.elts, value):
                     do_assign(t, v)
 
@@ -499,7 +506,7 @@ class DraconicInterpreter(SimpleInterpreter):
         for item in self._eval(node.iter):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in for block)')
+                raise TooManyStatements('Too many loops (in for block)', node)
 
             self._assign(node.target, self._FinalValue(value=item))
             try:
@@ -515,7 +522,7 @@ class DraconicInterpreter(SimpleInterpreter):
         while self._eval(node.test):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in while block)')
+                raise TooManyStatements('Too many loops (in while block)', node)
 
             try:
                 self._exec(node.body)

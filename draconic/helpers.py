@@ -95,23 +95,23 @@ class OperatorMixin:
     def _safe_power(self, a, b):
         """Exponent: limit power base and power to prevent CPU-locking computation"""
         if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
-            raise NumberTooHigh(f"{a} ** {b} is too large of an exponent")
+            _raise_in_context(NumberTooHigh, f"{a} ** {b} is too large of an exponent")
         return a ** b
 
     def _safe_mult(self, a, b):
         """Multiplication: limit the size of iterables that can be created"""
         # sequences can only be multiplied by ints, so this is safe
         if isinstance(b, int) and b * approx_len_of(a) > self._config.max_const_len:
-            raise IterableTooLong('Multiplying these two would create something too long')
+            _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
         if isinstance(a, int) and a * approx_len_of(b) > self._config.max_const_len:
-            raise IterableTooLong('Multiplying these two would create something too long')
+            _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
 
         return a * b
 
     def _safe_add(self, a, b):
         """Addition: limit the size of iterables that can be created"""
         if approx_len_of(a) + approx_len_of(b) > self._config.max_const_len:
-            raise IterableTooLong("Adding these two would create something too long")
+            _raise_in_context(IterableTooLong, "Adding these two would create something too long")
         return a + b
 
 
@@ -148,12 +148,12 @@ def safe_list(config):
     class SafeList(UserList):  # extends UserList so that [x] * y returns a SafeList, not a list
         def append(self, obj):
             if approx_len_of(self) + 1 > config.max_const_len:
-                raise IterableTooLong("This list is too long")
+                _raise_in_context(IterableTooLong, "This list is too long")
             super().append(obj)
 
         def extend(self, iterable):
             if approx_len_of(self) + approx_len_of(iterable) > config.max_const_len:
-                raise IterableTooLong("This list is too long")
+                _raise_in_context(IterableTooLong, "This list is too long")
             super().extend(iterable)
 
     return SafeList
@@ -163,17 +163,17 @@ def safe_set(config):
     class SafeSet(set):
         def update(self, *s):
             if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
-                raise IterableTooLong("This set is too large")
+                _raise_in_context(IterableTooLong, "This set is too large")
             super().update(*s)
 
         def add(self, element):
             if approx_len_of(self) + 1 > config.max_const_len:
-                raise IterableTooLong("This set is too large")
+                _raise_in_context(IterableTooLong, "This set is too large")
             super().add(element)
 
         def union(self, *s):
             if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
-                raise IterableTooLong("This set is too large")
+                _raise_in_context(IterableTooLong, "This set is too large")
             return SafeSet(super().union(*s))
 
     return SafeSet
@@ -186,7 +186,7 @@ def safe_dict(config):
                 other_dict = {}
 
             if approx_len_of(self) + approx_len_of(other_dict) + approx_len_of(kvs) > config.max_const_len:
-                raise IterableTooLong("This dict is too large")
+                _raise_in_context(IterableTooLong, "This dict is too large")
 
             super().update(other_dict, **kvs)
 
