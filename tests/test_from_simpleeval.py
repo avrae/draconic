@@ -3,14 +3,11 @@ Test cases adapted from SimpleEval: https://github.com/danthedeckie/simpleeval
 """
 import ast
 import operator
-import os
 import sys
 import unittest
 
-import draconic
-import draconic.helpers
-from draconic import DraconicInterpreter, FeatureNotAvailable, InvalidExpression, IterableTooLong, NotDefined, \
-    NumberTooHigh
+from draconic import DraconicInterpreter, DraconicSyntaxError, FeatureNotAvailable, InvalidExpression, IterableTooLong, \
+    NotDefined, NumberTooHigh
 
 
 class DRYTest(unittest.TestCase):
@@ -504,7 +501,7 @@ class TestComprehensions(DRYTest):
     """ Test the comprehensions support of the compound-types edition of the class. """
 
     def test_basic(self):
-        self.t('[a + 1 for a in [1,2,3]]', [2,3,4])
+        self.t('[a + 1 for a in [1,2,3]]', [2, 3, 4])
         self.t('{a + 1 for a in [1,2,3]}', {2, 3, 4})
         self.t('{a + 1: a - 1 for a in [1,2,3]}', {2: 0, 3: 1, 4: 2})
 
@@ -516,19 +513,19 @@ class TestComprehensions(DRYTest):
         self.t('list(a + 1 for a in [1,2,3])', [2, 3, 4])
 
     def test_with_self_reference(self):
-        self.t('[a + a for a in [1,2,3]]', [2,4,6])
+        self.t('[a + a for a in [1,2,3]]', [2, 4, 6])
         self.t('{a + a for a in [1,2,3]}', {2, 4, 6})
-        self.t('{a: a for a in [1,2,3]}', {1:1, 2:2, 3:3})
+        self.t('{a: a for a in [1,2,3]}', {1: 1, 2: 2, 3: 3})
 
     def test_with_if(self):
-        self.t('[a for a in [1,2,3,4,5] if a <= 3]', [1,2,3])
+        self.t('[a for a in [1,2,3,4,5] if a <= 3]', [1, 2, 3])
         self.t('{a for a in [1,2,3,4,5] if a <= 3}', {1, 2, 3})
-        self.t('{a: a for a in [1,2,3,4,5] if a <= 3}', {1:1, 2:2, 3:3})
+        self.t('{a: a for a in [1,2,3,4,5] if a <= 3}', {1: 1, 2: 2, 3: 3})
 
     def test_with_multiple_if(self):
-        self.t('[a for a in [1,2,3,4,5] if a <= 3 if a > 1 ]', [2,3])
+        self.t('[a for a in [1,2,3,4,5] if a <= 3 if a > 1 ]', [2, 3])
         self.t('{a for a in [1,2,3,4,5] if a <= 3 if a > 1 }', {2, 3})
-        self.t('{a:a for a in [1,2,3,4,5] if a <= 3 if a > 1 }', {2:2, 3:3})
+        self.t('{a:a for a in [1,2,3,4,5] if a <= 3 if a > 1 }', {2: 2, 3: 3})
 
     def test_attr_access_fails(self):
         with self.assertRaises(FeatureNotAvailable):
@@ -543,12 +540,12 @@ class TestComprehensions(DRYTest):
     def test_unpack(self):
         self.t('[a+b for a,b in ((1,2),(3,4))]', [3, 7])
         self.t('{a+b for a,b in ((1,2),(3,4))}', {3, 7})
-        self.t('{a: b for a,b in ((1,2),(3,4))}', {1:2, 3:4})
+        self.t('{a: b for a,b in ((1,2),(3,4))}', {1: 2, 3: 4})
 
     def test_nested_unpack(self):
         self.t('[a+b+c for a, (b, c) in ((1,(1,1)),(3,(2,2)))]', [3, 7])
         self.t('{a+b+c for a, (b, c) in ((1,(1,1)),(3,(2,2)))}', {3, 7})
-        self.t('{a:b+c for a, (b, c) in ((1,(1,1)),(3,(2,2)))}', {1:2, 3:4})
+        self.t('{a:b+c for a, (b, c) in ((1,(1,1)),(3,(2,2)))}', {1: 2, 3: 4})
 
     def test_other_places(self):
         self.s.names = {**self.s.names, 'sum': sum}
@@ -683,7 +680,7 @@ class TestNames(DRYTest):
 
 
 class TestWhitespace(DRYTest):
-    """ test that incorrect whitespace (preceding/trailing) doesn't matter. """
+    """ test that incorrect whitespace (preceding/trailing) does matter. """
 
     def test_no_whitespace(self):
         self.t('200 + 200', 400)
@@ -692,16 +689,20 @@ class TestWhitespace(DRYTest):
         self.t('200 + 200       ', 400)
 
     def test_preciding_whitespace(self):
-        self.t('    200 + 200', 400)
+        with self.assertRaises(DraconicSyntaxError):
+            self.t('    200 + 200', 400)
 
     def test_preceding_tab_whitespace(self):
-        self.t("\t200 + 200", 400)
+        with self.assertRaises(DraconicSyntaxError):
+            self.t("\t200 + 200", 400)
 
     def test_preceding_mixed_whitespace(self):
-        self.t("  \t 200 + 200", 400)
+        with self.assertRaises(DraconicSyntaxError):
+            self.t("  \t 200 + 200", 400)
 
     def test_both_ends_whitespace(self):
-        self.t("  \t 200 + 200  ", 400)
+        with self.assertRaises(DraconicSyntaxError):
+            self.t("  \t 200 + 200  ", 400)
 
 
 class TestMethodChaining(DRYTest):

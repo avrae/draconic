@@ -60,7 +60,7 @@ class SimpleInterpreter(OperatorMixin):
         :rtype: list[ast.AST]
         """
         try:
-            return ast.parse(expr.strip()).body
+            return ast.parse(expr).body
         except SyntaxError as e:
             raise DraconicSyntaxError(e)
 

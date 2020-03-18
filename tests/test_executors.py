@@ -40,6 +40,19 @@ def test_nested(i, ex):
     assert i.out__ == ["0 < 2", "1 < 2", "2 == 2", "3 > 2", "4 > 2"]
 
 
+def test_nested_2(ex):
+    expr = """
+    x = 0
+    y = 0
+    while x < 50:
+        while y < 50:
+            y += 1
+        x += 1
+    return y
+    """
+    assert ex(expr) == 50 * 50
+
+
 def test_keywords(i, ex):
     expr = """
     for i in range(10):
