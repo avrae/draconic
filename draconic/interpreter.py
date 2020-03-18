@@ -316,7 +316,10 @@ class DraconicInterpreter(SimpleInterpreter):
             expr = self.parse(expr)
 
         self._preflight()
-        return self._exec(expr)
+        try:
+            self._exec(expr)
+        except self._Return as r:
+            return r.value
 
     def _preflight(self):
         self._num_stmts = 0
@@ -341,10 +344,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _exec(self, body):
         for expression in body:
-            try:
-                self._eval(expression)
-            except self._Return as r:
-                return r.value
+            self._eval(expression)
 
     @property
     def names(self):

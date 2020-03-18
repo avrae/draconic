@@ -83,3 +83,39 @@ def test_infinite_loops(ex):
     """
     with pytest.raises(TooManyStatements):
         ex(expr)
+
+
+def test_break(ex):
+    expr = """
+    while 1:
+        break
+    return 1
+    """
+    assert ex(expr) == 1
+
+    expr = """
+    i = 0
+    while i < 1000000000000000:
+        i += 1
+        if i == 5:
+            break
+    return i
+    """
+    assert ex(expr) == 5
+
+
+def test_return(ex):
+    expr = """
+    while 1:
+        return 1
+    """
+    assert ex(expr) == 1
+
+    expr = """
+    i = 0
+    while i < 1000000000000000:
+        i += 1
+        if i == 5:
+            return i
+    """
+    assert ex(expr) == 5
