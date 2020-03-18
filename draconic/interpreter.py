@@ -308,7 +308,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def eval(self, expr):
         try:
-            super().eval(expr)
+            return super().eval(expr)
         except self._Return as r:
             return r.value
 
