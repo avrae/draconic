@@ -306,6 +306,12 @@ class DraconicInterpreter(SimpleInterpreter):
         self._loops = 0
         self._names = initial_names
 
+    def eval(self, expr):
+        try:
+            super().eval(expr)
+        except self._Return as r:
+            return r.value
+
     def execute(self, expr):
         """
         Executes an AST body.
