@@ -323,6 +323,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _preflight(self):
         self._num_stmts = 0
+        self._loops = 0
         super()._preflight()
 
     def _eval(self, node):
