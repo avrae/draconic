@@ -42,15 +42,17 @@ def test_nested(i, ex):
 
 def test_nested_2(ex):
     expr = """
+    total = 0
     x = 0
-    y = 0
-    while x < 50:
-        while y < 50:
+    while x < 2:
+        y = 0
+        while y < 2:
             y += 1
+            total += 1
         x += 1
-    return y
+    return total
     """
-    assert ex(expr) == 50 * 50
+    assert ex(expr) == 4
 
 
 def test_keywords(i, ex):
