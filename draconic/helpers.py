@@ -51,7 +51,7 @@ class DraconicConfig:
         return {
             "True": True, "False": False, "None": None,
             # functions
-            "int": int, "float": float, "str": str, "tuple": tuple,
+            "bool": bool, "int": int, "float": float, "str": str, "tuple": tuple,
             "dict": safe_dict(self), "list": safe_list(self), "set": safe_set(self)
         }
 
