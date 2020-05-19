@@ -1,4 +1,5 @@
 import pytest
+import sys
 
 from draconic.exceptions import *
 
@@ -84,6 +85,8 @@ def test_keywords(i, ex):
 
 
 def test_namedexpr_if(i, ex):
+    if sys.version_info < (3, 8, 0): return
+
     expr = """
     if (a := 'true'):
         print(a)
@@ -96,6 +99,8 @@ def test_namedexpr_if(i, ex):
 
 
 def test_namedexpr_for(i, ex):
+    if sys.version_info < (3, 8, 0): return
+
     expr = """
     for i in (l := [1, 2, 3]):
         print(l.index(i))
@@ -106,6 +111,8 @@ def test_namedexpr_for(i, ex):
 
 
 def test_namedexpr_while(i, ex):
+    if sys.version_info < (3, 8, 0): return
+
     expr = """
     i = 1
     while (a := i % 5) != 0:
