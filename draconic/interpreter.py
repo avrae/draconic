@@ -461,9 +461,6 @@ class DraconicInterpreter(SimpleInterpreter):
         self._aug_assign(node.target, node.op, node.value)
 
     def _eval_namedexpr(self, node):
-        if not hasattr(ast, 'NamedExpr'):
-            raise FeatureNotAvailable("NamedExpr is not available in Python versions below 3.8")
-
         self._assign(node.target, node.value)
         return self._eval_name(node.target)
 
