@@ -278,7 +278,6 @@ class DraconicInterpreter(SimpleInterpreter):
             # assignments:
             ast.Assign: self._eval_assign,
             ast.AugAssign: self._eval_augassign,
-            ast.NamedExpr: self._eval_namedexpr,
             self._FinalValue: lambda v: v.value,
             # control:
             ast.Return: self._exec_return,
@@ -289,6 +288,11 @@ class DraconicInterpreter(SimpleInterpreter):
             ast.Continue: self._exec_continue,
             ast.Pass: lambda node: None
         })
+
+        if hasattr(ast, 'NamedExpr'):
+            self.nodes.update({
+                ast.NamedExpr: self._eval_namedexpr
+            })
 
         self.assign_nodes = {
             ast.Name: self._assign_name,
@@ -457,6 +461,9 @@ class DraconicInterpreter(SimpleInterpreter):
         self._aug_assign(node.target, node.op, node.value)
 
     def _eval_namedexpr(self, node):
+        if not hasattr(ast, 'NamedExpr'):
+            raise FeatureNotAvailable("NamedExpr is not available in Python versions below 3.8")
+
         self._assign(node.target, node.value)
         return self._eval_name(node.target)
 
