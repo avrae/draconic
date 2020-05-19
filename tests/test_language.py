@@ -189,3 +189,34 @@ class TestCompoundAssignments:
         e('b[0] = 0')
         assert e('a') == [0, 2, 3]
         assert e('b') == [0, 2, 3]
+
+
+class TestNamedExpressions:
+    def test_names(self, e):
+        assert e('(a := 1)') == 1
+        assert e('a') == 1
+
+        assert e('(b := a + 1)') == 2
+        assert e('b') == 2
+
+        with pytest.raises(NotDefined):
+            e('(c := x)')
+
+        e("d = [1, 2, 3]")
+        with pytest.raises(DraconicSyntaxError):
+            e("(d[0] := 0)")
+
+    def test_assigning_expressions(self, e):
+        e('c = "foo"')
+
+        assert e('(ab := a + b)') == 3
+        assert e('ab') == 3
+
+        assert e('(cb := c * b)') == 'foofoo'
+        assert e('cb') == 'foofoo'
+
+        assert e('(cb := cb.upper())') == 'FOOFOO'
+        assert e('cb') == 'FOOFOO'
+
+        with pytest.raises(IterableTooLong):
+            e('(cb := cb * 1000000)')

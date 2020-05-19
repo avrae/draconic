@@ -83,6 +83,40 @@ def test_keywords(i, ex):
     assert i.out__ == [5, 6, 7]
 
 
+def test_namedexpr_if(i, ex):
+    expr = """
+    if (a := 'true'):
+        print(a)
+    else:
+        print('false')
+    """
+
+    assert ex(expr) is None
+    assert i.out__ == ['true']
+
+
+def test_namedexpr_for(i, ex):
+    expr = """
+    for i in (l := [1, 2, 3]):
+        print(l.index(i))
+    """
+
+    assert ex(expr) is None
+    assert i.out__ == [0, 1, 2]
+
+
+def test_namedexpr_while(i, ex):
+    expr = """
+    i = 1
+    while (a := i % 5) != 0:
+        print(a)
+        i += 1
+    """
+
+    assert ex(expr) is None
+    assert i.out__ == [1, 2, 3, 4]
+
+
 def test_infinite_loops(ex):
     expr = """
     while 1:

@@ -278,6 +278,7 @@ class DraconicInterpreter(SimpleInterpreter):
             # assignments:
             ast.Assign: self._eval_assign,
             ast.AugAssign: self._eval_augassign,
+            ast.NamedExpr: self._eval_namedexpr,
             self._FinalValue: lambda v: v.value,
             # control:
             ast.Return: self._exec_return,
@@ -454,6 +455,10 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _eval_augassign(self, node):
         self._aug_assign(node.target, node.op, node.value)
+
+    def _eval_namedexpr(self, node):
+        self._assign(node.target, node.value)
+        return self._eval_name(node.target)
 
     def _assign(self, names, values):
         try:
