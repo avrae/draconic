@@ -220,3 +220,4 @@ class TestNamedExpressions:
 
         with pytest.raises(IterableTooLong):
             e('(cb := cb * 1000000)')
+
