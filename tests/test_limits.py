@@ -84,6 +84,9 @@ def test_dict(i, e):
     with pytest.raises(IterableTooLong):
         e("long.update(long2)")
 
+    with pytest.raises(IterableTooLong):
+        e("long.update({'foo': 'bar'})")
+
 
 def test_that_it_still_works_right(i, e):
     e("l = [1, 2]")

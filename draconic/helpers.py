@@ -171,6 +171,19 @@ def safe_list(config):
             super().extend(iterable)
             self.__approx_len__ += other_len
 
+        def pop(self, i=-1):
+            retval = super().pop(i)
+            self.__approx_len__ -= 1
+            return retval
+
+        def remove(self, item):
+            super().remove(item)
+            self.__approx_len__ -= 1
+
+        def clear(self):
+            super().clear()
+            self.__approx_len__ = 0
+
     return SafeList
 
 
@@ -198,6 +211,23 @@ def safe_set(config):
                 _raise_in_context(IterableTooLong, "This set is too large")
             return SafeSet(super().union(*s))
 
+        def pop(self):
+            retval = super().pop()
+            self.__approx_len__ -= 1
+            return retval
+
+        def remove(self, element):
+            super().remove(element)
+            self.__approx_len__ -= 1
+
+        def discard(self, element):
+            super().discard(element)
+            self.__approx_len__ -= 1
+
+        def clear(self):
+            super().clear()
+            self.__approx_len__ = 0
+
     return SafeSet
 
 
@@ -217,5 +247,21 @@ def safe_dict(config):
 
             super().update(other_dict, **kvs)
             self.__approx_len__ += other_lens
+
+        def __setitem__(self, key, value):
+            other_len = approx_len_of(value)
+            if approx_len_of(self) + other_len > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This dict is too large")
+            self.__approx_len__ += other_len
+            return super().__setitem__(key, value)
+
+        def pop(self, k):
+            retval = super().pop(k)
+            self.__approx_len__ -= 1
+            return retval
+
+        def __delitem__(self, key):
+            super().__delitem__(key)
+            self.__approx_len__ -= 1
 
     return SafeDict
