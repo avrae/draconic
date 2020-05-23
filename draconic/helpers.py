@@ -120,6 +120,9 @@ def approx_len_of(obj, visited=None):
     if isinstance(obj, str):
         return len(obj)
 
+    if hasattr(obj, "__approx_len__"):
+        return obj.__approx_len__
+
     if visited is None:
         visited = [obj]
 
@@ -137,6 +140,11 @@ def approx_len_of(obj, visited=None):
     except TypeError:  # object is not iterable
         pass
 
+    try:
+        setattr(obj, "__approx_len__", size)
+    except AttributeError:
+        pass
+
     return size
 
 
@@ -146,30 +154,44 @@ def approx_len_of(obj, visited=None):
 
 def safe_list(config):
     class SafeList(UserList):  # extends UserList so that [x] * y returns a SafeList, not a list
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.__approx_len__ = approx_len_of(self)
+
         def append(self, obj):
             if approx_len_of(self) + 1 > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This list is too long")
             super().append(obj)
+            self.__approx_len__ += 1
 
         def extend(self, iterable):
-            if approx_len_of(self) + approx_len_of(iterable) > config.max_const_len:
+            other_len = approx_len_of(iterable)
+            if approx_len_of(self) + other_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This list is too long")
             super().extend(iterable)
+            self.__approx_len__ += other_len
 
     return SafeList
 
 
 def safe_set(config):
     class SafeSet(set):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.__approx_len__ = approx_len_of(self)
+
         def update(self, *s):
-            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+            other_lens = sum(approx_len_of(other) for other in s)
+            if approx_len_of(self) + other_lens > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().update(*s)
+            self.__approx_len__ += other_lens
 
         def add(self, element):
             if approx_len_of(self) + 1 > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().add(element)
+            self.__approx_len__ += 1
 
         def union(self, *s):
             if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
@@ -181,13 +203,19 @@ def safe_set(config):
 
 def safe_dict(config):
     class SafeDict(dict):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.__approx_len__ = approx_len_of(self)
+
         def update(self, other_dict=None, **kvs):
             if other_dict is None:
                 other_dict = {}
 
-            if approx_len_of(self) + approx_len_of(other_dict) + approx_len_of(kvs) > config.max_const_len:
+            other_lens = approx_len_of(other_dict) + approx_len_of(kvs)
+            if approx_len_of(self) + other_lens > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This dict is too large")
 
             super().update(other_dict, **kvs)
+            self.__approx_len__ += other_lens
 
     return SafeDict
