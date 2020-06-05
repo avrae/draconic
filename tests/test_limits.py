@@ -125,3 +125,17 @@ def test_types(i, e):
 
     assert i.names['l'] == [1, 3]
     assert i.names['d'] == {1: 1, 2: 3}
+
+
+def test_types_again(i, e):
+    e("a = [1, 2, 3]")
+    e("b = list('123')")
+    assert type(i.names['a']) is type(i.names['b']) is i._list
+
+    e("a = {1, 2, 3}")
+    e("b = set('123')")
+    assert type(i.names['a']) is type(i.names['b']) is i._set
+
+    e("a = {1: 1, 2: 2}")
+    e("b = dict(((1, 1), (2, 2)))")
+    assert type(i.names['a']) is type(i.names['b']) is i._dict

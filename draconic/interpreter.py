@@ -303,9 +303,9 @@ class DraconicInterpreter(SimpleInterpreter):
         }
 
         # compound type helpers
-        self._list = safe_list(self._config)
-        self._set = safe_set(self._config)
-        self._dict = safe_dict(self._config)
+        self._list = self._config.list
+        self._set = self._config.set
+        self._dict = self._config.dict
 
         self._num_stmts = 0
         self._loops = 0

@@ -34,8 +34,6 @@ class DraconicConfig:
             disallow_prefixes = DISALLOW_PREFIXES
         if disallow_methods is None:
             disallow_methods = DISALLOW_METHODS
-        if default_names is None:
-            default_names = self._default_names()
 
         self.max_const_len = max_const_len
         self.max_loops = max_loops
@@ -44,15 +42,36 @@ class DraconicConfig:
         self.max_power = max_power
         self.disallow_prefixes = disallow_prefixes
         self.disallow_methods = disallow_methods
-        self.default_names = default_names
         self.builtins_extend_default = builtins_extend_default
+
+        # types
+        self._list = safe_list(self)
+        self._dict = safe_dict(self)
+        self._set = safe_set(self)
+
+        # default names
+        if default_names is None:
+            default_names = self._default_names()
+        self.default_names = default_names
+
+    @property
+    def list(self):
+        return self._list
+
+    @property
+    def dict(self):
+        return self._dict
+
+    @property
+    def set(self):
+        return self._set
 
     def _default_names(self):
         return {
             "True": True, "False": False, "None": None,
             # functions
             "bool": bool, "int": int, "float": float, "str": str, "tuple": tuple,
-            "dict": safe_dict(self), "list": safe_list(self), "set": safe_set(self)
+            "dict": self.dict, "list": self.list, "set": self.set
         }
 
 
