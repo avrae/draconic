@@ -1,4 +1,6 @@
 import ast
+import string
+import _string
 import operator as op
 from collections import UserList
 
@@ -8,7 +10,7 @@ __all__ = ("DraconicConfig", "OperatorMixin", "approx_len_of", "safe_dict", "saf
 
 # ===== config =====
 DISALLOW_PREFIXES = ['_', 'func_']
-DISALLOW_METHODS = ['format', 'format_map', 'mro']
+DISALLOW_METHODS = ['format_map', 'mro']
 
 
 class DraconicConfig:
@@ -352,3 +354,28 @@ def safe_dict(config):
             self.__approx_len__ -= 1
 
     return SafeDict
+
+
+def safe_format(config: DraconicConfig, interpreter_class):
+    class SafeFormatter(string.Formatter):
+        def __init__(self):
+            self._interpreter_class = interpreter_class
+
+        def get_field(self, field_name, args, kwargs):
+            first, rest = _string.formatter_field_name_split(field_name)
+
+            obj = self.get_value(first, args, kwargs)
+
+            interpreter = self._interpreter_class(builtins={"_Format__object": obj}, config=config)
+
+            # loop through the rest of the field_name, doing
+            #  getattr or getitem as needed
+            for is_attr, i in rest:
+                if is_attr:
+                    obj = interpreter.eval(f"_Format__object.{i}")
+                else:
+                    obj = interpreter.eval(f"_Format__object[{i}]")
+
+            return obj, first
+
+    return SafeFormatter().format

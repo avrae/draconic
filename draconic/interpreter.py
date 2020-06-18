@@ -1,7 +1,7 @@
 import ast
 
 from .exceptions import *
-from .helpers import DraconicConfig, OperatorMixin, safe_dict, safe_list, safe_set
+from .helpers import DraconicConfig, OperatorMixin, safe_dict, safe_list, safe_set, safe_format
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -163,7 +163,19 @@ class SimpleInterpreter(OperatorMixin):
             else self._eval(node.orelse)
 
     def _eval_call(self, node):
+        if hasattr(node.func, "value") and \
+                type(fmt_str := self._eval(node.func.value)) is str and node.func.attr == 'format':
+
+            func = safe_format(self._config, SimpleInterpreter)
+
+            return func(
+                fmt_str,
+                *(self._eval(a) for a in node.args),
+                **dict(self._eval(k) for k in node.keywords)
+            )
+
         func = self._eval(node.func)
+
         return func(
             *(self._eval(a) for a in node.args),
             **dict(self._eval(k) for k in node.keywords)
