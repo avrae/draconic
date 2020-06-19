@@ -89,6 +89,10 @@ class SimpleInterpreter(OperatorMixin):
             return handler(node)
         except _PostponedRaise as pr:
             raise pr.cls(*pr.args, **pr.kwargs, node=node)
+        except DraconicException:
+            raise
+        except Exception as e:
+            raise AnnotatedException(e, node)
 
     def _preflight(self):
         """Called before starting evaluation."""

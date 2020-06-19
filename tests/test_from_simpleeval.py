@@ -6,8 +6,8 @@ import operator
 import sys
 import unittest
 
-from draconic import DraconicInterpreter, DraconicSyntaxError, FeatureNotAvailable, InvalidExpression, IterableTooLong, \
-    NotDefined, NumberTooHigh
+from draconic import AnnotatedException, DraconicException, DraconicInterpreter, DraconicSyntaxError, \
+    FeatureNotAvailable, InvalidExpression, IterableTooLong, NotDefined, NumberTooHigh
 
 
 class DRYTest(unittest.TestCase):
@@ -17,6 +17,11 @@ class DRYTest(unittest.TestCase):
     def setUp(self):
         """ initialize a SimpleEval """
         self.s = DraconicInterpreter()
+
+    def assertRaises(self, expected_exception, *args, **kwargs):
+        if not issubclass(expected_exception, DraconicException):
+            return super().assertRaises((AnnotatedException, expected_exception))
+        return super().assertRaises(expected_exception)
 
     def t(self, expr, shouldbe):  # pylint: disable=invalid-name
         """ test an evaluation of an expression against an expected answer """

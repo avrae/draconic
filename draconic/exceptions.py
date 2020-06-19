@@ -1,7 +1,7 @@
 __all__ = (
     "DraconicException", "DraconicSyntaxError",
     "InvalidExpression", "NotDefined", "FeatureNotAvailable", "DraconicValueError",
-    "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements",
+    "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements", "AnnotatedException",
     "_PostponedRaise", "_raise_in_context"
 )
 
@@ -64,6 +64,14 @@ class IterableTooLong(LimitException):
 class TooManyStatements(LimitException):
     """Tried to execute too many statements."""
     pass
+
+
+class AnnotatedException(InvalidExpression):
+    """A wrapper for another exception to handle lineno info."""
+
+    def __init__(self, original, node):
+        super().__init__(str(original), node)
+        self.original = original
 
 
 # we need to raise some exception, but don't have the node context right now
