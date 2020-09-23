@@ -618,13 +618,13 @@ class DraconicInterpreter(SimpleInterpreter):
     # noinspection PyProtectedMember
     def _before_function_call(self, __calling_node, __functiondef, /, *args, **kwargs):
         # store current names
-        old_names = self._names.copy()
+        old_names = self._names
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
             raise TooMuchRecursion('Maximum recursion depth exeeeded', __calling_node)
         # bind closure names
-        self._names = __functiondef._outer_scope_names
+        self._names = __functiondef._outer_scope_names.copy()
         # check and bind args
         arguments = __functiondef._node.args
         # check valid pos num
@@ -705,13 +705,3 @@ class DraconicInterpreter(SimpleInterpreter):
         finally:
             # restore old names
             self._names = old_names
-
-# import draconic
-# i = draconic.DraconicInterpreter()
-# a = """
-# def fac(i):
-#     if i < 1:
-#         return 1
-#     return i*fac(i-1)
-# return fac(5)
-# """
