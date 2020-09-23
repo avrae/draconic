@@ -219,13 +219,13 @@ class TestFunctions(DRYTest):
 class TestNewFeatures(DRYTest):
     """ Tests which will break when new features are added..."""
 
-    def test_lambda(self):
-        with self.assertRaises(FeatureNotAvailable):
-            self.t('lambda x:22', None)
+    # update 9/23/2020: these have been added!
+
+    # def test_lambda(self):
+    #     self.t('lambda x:22', None)
 
     def test_lambda_application(self):
-        with self.assertRaises(FeatureNotAvailable):
-            self.t('(lambda x:22)(44)', None)
+        self.t('(lambda x:22)(44)', 22)
 
 
 class TestTryingToBreakOut(DRYTest):
