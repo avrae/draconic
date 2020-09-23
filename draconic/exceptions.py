@@ -1,7 +1,7 @@
 __all__ = (
     "DraconicException", "DraconicSyntaxError",
     "InvalidExpression", "NotDefined", "FeatureNotAvailable", "DraconicValueError",
-    "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements", "AnnotatedException",
+    "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements", "TooMuchRecursion", "AnnotatedException",
     "_PostponedRaise", "_raise_in_context"
 )
 
@@ -63,6 +63,11 @@ class IterableTooLong(LimitException):
 
 class TooManyStatements(LimitException):
     """Tried to execute too many statements."""
+    pass
+
+
+class TooMuchRecursion(LimitException):
+    """Too deep in recursion."""
     pass
 
 

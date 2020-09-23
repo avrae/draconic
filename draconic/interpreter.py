@@ -1,7 +1,8 @@
 import ast
 
 from .exceptions import *
-from .helpers import DraconicConfig, OperatorMixin, safe_dict, safe_list, safe_set
+from .exceptions import TooMuchRecursion
+from .helpers import DraconicConfig, OperatorMixin
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -290,7 +291,10 @@ class DraconicInterpreter(SimpleInterpreter):
             ast.While: self._exec_while,
             ast.Break: self._exec_break,
             ast.Continue: self._exec_continue,
-            ast.Pass: lambda node: None
+            ast.Pass: lambda node: None,
+            # functions:
+            ast.FunctionDef: self._eval_functiondef,
+            ast.Lambda: self._eval_lambda
         })
 
         if hasattr(ast, 'NamedExpr'):
@@ -313,6 +317,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
         self._num_stmts = 0
         self._loops = 0
+        self._depth = 1
         self._names = initial_names
 
     def eval(self, expr):
@@ -479,6 +484,7 @@ class DraconicInterpreter(SimpleInterpreter):
             handler = self.assign_nodes[type(names)]
         except KeyError:
             raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__), names)
+        # noinspection PyArgumentList
         return handler(names, values)
 
     def _aug_assign(self, target, oper, value):
@@ -564,3 +570,148 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _exec_continue(self, node):
         raise self._Continue
+
+    # ===== functions =====
+    # classes
+    class Function:
+        """A wrapper class around an ast.FunctionDef."""
+
+        def __init__(self, functiondef, names_at_def):
+            self._node = functiondef
+            self._outer_scope_names = names_at_def
+            self._name = functiondef.name
+
+        def __repr__(self):
+            return f"<Function {self._name}>"
+
+    class Lambda:
+        """A wrapper class around an ast.Lambda."""
+
+        def __init__(self, lambdadef, names_at_def):
+            self._node = lambdadef
+            self._outer_scope_names = names_at_def
+            self._name = '<lambda>'
+
+        def __repr__(self):
+            return f"<Function <lambda>>"
+
+    # call override
+    def _eval_call(self, node):
+        func = self._eval(node.func)
+        args = (self._eval(a) for a in node.args)
+        kwargs = dict(self._eval(k) for k in node.keywords)
+        if isinstance(func, self.Function):
+            return self._exec_function(node, func, *args, **kwargs)
+        elif isinstance(func, self.Lambda):
+            return self._exec_lambda(node, func, *args, **kwargs)
+        # noinspection PyCallingNonCallable
+        return func(*args, **kwargs)
+
+    # definitions
+    def _eval_functiondef(self, node):
+        self._names[node.name] = self.Function(node, self._names)
+
+    def _eval_lambda(self, node):
+        return self.Lambda(node, self._names)
+
+    # executions
+    # noinspection PyProtectedMember
+    def _before_function_call(self, __calling_node, __functiondef, /, *args, **kwargs):
+        # store current names
+        old_names = self._names.copy()
+        # check limits
+        self._depth += 1
+        if self._depth > self._config.max_recursion_depth:
+            raise TooMuchRecursion('Maximum recursion depth exeeeded', __calling_node)
+        # bind closure names
+        self._names = __functiondef._outer_scope_names
+        # check and bind args
+        arguments = __functiondef._node.args
+        # check valid pos num
+        if len(args) > (numpos := len(arguments.posonlyargs) + len(arguments.args)) and arguments.vararg is None:
+            raise TypeError(f"{__functiondef._name}() takes {numpos} positional arguments but {len(args)} were given")
+        args_i = 0
+        default_i = len(arguments.defaults) - numpos
+        # posonly
+        for posonly in arguments.posonlyargs:
+            if args_i + 1 > len(args):
+                if default_i < 0:
+                    raise TypeError(f"{__functiondef._name}() missing required positional argument: {posonly.arg!r}")
+                self._names[posonly.arg] = self._eval(arguments.defaults[default_i])
+            else:
+                self._names[posonly.arg] = args[args_i]
+            args_i += 1
+            default_i += 1
+        # normal
+        for posarg in arguments.args:
+            # at least 1
+            if args_i + 1 > len(args) and posarg.arg not in kwargs:
+                if default_i < 0:
+                    raise TypeError(f"{__functiondef._name}() missing required positional argument: {posarg.arg!r}")
+                self._names[posarg.arg] = self._eval(arguments.defaults[default_i])
+            # pos and kw
+            elif args_i + 1 <= len(args) and posarg.arg in kwargs:
+                raise TypeError(f"{__functiondef._name}() got multiple values for argument {posarg.arg!r}")
+            elif posarg.arg in kwargs:
+                self._names[posarg.arg] = kwargs.pop(posarg.arg)
+            else:
+                # we won't indexerror because if it's not in kwargs and args_i is invalid, the first if catches it
+                self._names[posarg.arg] = args[args_i]
+            args_i += 1
+            default_i += 1
+        # kwargonly
+        for k_i, kwargonly in enumerate(arguments.kwonlyargs):
+            if kwargonly.arg not in kwargs and arguments.kw_defaults[k_i] is None:
+                raise TypeError(f"{__functiondef._name}() missing required keyword argument: {kwargonly.arg!r}")
+            if kwargonly.arg in kwargs:
+                self._names[kwargonly.arg] = kwargs.pop(kwargonly.arg)
+            else:
+                self._names[kwargonly.arg] = self._eval(arguments.kw_defaults[k_i])
+        # *args
+        if arguments.vararg is not None:
+            self._names[arguments.vararg.arg] = tuple(args[args_i:])
+        # **kwargs
+        if arguments.kwarg is not None:
+            self._names[arguments.kwarg.arg] = kwargs
+        elif kwargs:  # and arguments.kwarg is None (implicit)
+            raise TypeError(f"{__functiondef._name}() got unexpected keyword arguments: {tuple(kwargs.keys())}")
+
+        # return the old names so we can rebind them later
+        return old_names
+
+    # noinspection PyProtectedMember
+    def _exec_function(self, __calling_node, __functiondef: Function, /, *args, **kwargs):
+        old_names = self._before_function_call(__calling_node, __functiondef, *args, **kwargs)
+
+        # execute function
+        try:
+            self._exec(__functiondef._node.body)
+        except self._Return as r:
+            return r.value
+        except (self._Break, self._Continue):
+            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
+                                                  ("<string>", 1, 1, __functiondef._node.body)))
+        finally:
+            # restore old names
+            self._names = old_names
+
+    # noinspection PyProtectedMember
+    def _exec_lambda(self, __calling_node, __lambdadef: Lambda, /, *args, **kwargs):
+        old_names = self._before_function_call(__calling_node, __lambdadef, *args, **kwargs)
+
+        # execute function
+        try:
+            return self._eval(__lambdadef._node.body)
+        finally:
+            # restore old names
+            self._names = old_names
+
+# import draconic
+# i = draconic.DraconicInterpreter()
+# a = """
+# def fac(i):
+#     if i < 1:
+#         return 1
+#     return i*fac(i-1)
+# return fac(5)
+# """
