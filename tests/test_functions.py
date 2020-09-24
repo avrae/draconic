@@ -239,6 +239,15 @@ def test_function_scoping(ex):
     """
     assert ex(expr) == (42, (3, 1, 2), 1, 2)
 
+    expr = """
+    a = 1
+    def incr_locally():
+        a += 1
+        return a
+    return a, incr_locally(), incr_locally(), a
+    """
+    assert ex(expr) == (1, 2, 2, 1)
+
 
 def test_weird_edges(ex):
     expr = """
