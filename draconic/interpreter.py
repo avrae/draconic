@@ -694,6 +694,8 @@ class DraconicInterpreter(SimpleInterpreter):
         finally:
             # restore old names
             self._names = old_names
+            # reduce recursion depth
+            self._depth -= 1
 
     # noinspection PyProtectedMember
     def _exec_lambda(self, __calling_node, __lambdadef: Lambda, /, *args, **kwargs):
@@ -705,3 +707,5 @@ class DraconicInterpreter(SimpleInterpreter):
         finally:
             # restore old names
             self._names = old_names
+            # reduce recursion depth
+            self._depth -= 1
