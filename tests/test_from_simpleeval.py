@@ -245,7 +245,7 @@ class TestTryingToBreakOut(DRYTest):
         """ exponent operations can take a long time. """
         old_max = self.s._config.max_power_base
 
-        self.t("9**9**3", 9 ** 9 ** 3)
+        self.t("9**9", 9 ** 9)
 
         with self.assertRaises(NumberTooHigh):
             self.t("9**9**8", 0)
