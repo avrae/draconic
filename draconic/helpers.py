@@ -279,6 +279,16 @@ def safe_set(config):
                 _raise_in_context(IterableTooLong, "This set is too large")
             return SafeSet(super().union(*s))
 
+        def intersection(self, *s):
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().union(*s))
+
+        def symmetric_difference(self, *s):
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().union(*s))
+
         def pop(self):
             retval = super().pop()
             self.__approx_len__ -= 1
@@ -315,6 +325,12 @@ def safe_dict(config):
 
             super().update(other_dict, **kvs)
             self.__approx_len__ += other_lens
+
+        def __or__(self, other):
+            if approx_len_of(self) + approx_len_of(other) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This dict is too large")
+
+            return super().__or__(other)
 
         def __setitem__(self, key, value):
             other_len = approx_len_of(value)

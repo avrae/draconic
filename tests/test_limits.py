@@ -64,6 +64,21 @@ def test_set(i, e):
         e("long.union(long2)")
 
     with pytest.raises(IterableTooLong):
+        e("long | long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long.intersection(long)")
+
+    with pytest.raises(IterableTooLong):
+        e("long & long")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference(long2)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^ long2")
+
+    with pytest.raises(IterableTooLong):
         e("long.update({1000})")
 
     # we should always be operating using safe sets
@@ -87,6 +102,9 @@ def test_dict(i, e):
 
     with pytest.raises(IterableTooLong):
         e("long.update({'foo': 'bar'})")
+
+    with pytest.raises(IterableTooLong):
+        e("long | {'foo': 'bar'}")
 
 
 def test_that_it_still_works_right(i, e):
