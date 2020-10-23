@@ -165,6 +165,9 @@ def test_int_limits(e):
         e("2 ** 31")
 
     with pytest.raises(NumberTooHigh):
+        e("2 << 31")
+
+    with pytest.raises(NumberTooHigh):
         e("min_int - 1")
 
     with pytest.raises(NumberTooHigh):

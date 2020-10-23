@@ -98,6 +98,12 @@ class OperatorMixin:
             ast.FloorDiv: op.floordiv,
             ast.Pow: self._safe_power,
             ast.Mod: op.mod,
+            ast.LShift: self._safe_lshift,
+            ast.RShift: op.rshift,
+            ast.BitOr: op.or_,
+            ast.BitXor: op.xor,
+            ast.BitAnd: op.and_,
+            ast.Invert: op.invert,
             # unary
             ast.Not: op.not_,
             ast.USub: op.neg,
@@ -154,6 +160,19 @@ class OperatorMixin:
         if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
             _raise_in_context(NumberTooHigh, "Subtracting these two would create a number too large")
         return result
+
+    def _safe_lshift(self, a, b):
+        """Left Bit-Shift: limit the size of integers/floats to prevent CPU-locking computation"""
+        self._check_binop_operands(a, b)
+
+        if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
+            _raise_in_context(NumberTooHigh, f"{a} << {b} is too large of a shift")
+
+        result = a << b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Shifting these two would create a number too large")
+
+        return a << b
 
     def _check_binop_operands(self, a, b):
         """Ensures both operands of a binary operation are safe (int limit)."""
