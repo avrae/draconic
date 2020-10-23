@@ -8,7 +8,7 @@ from draconic.helpers import DraconicConfig
 @pytest.fixture()
 def i():
     # 1000-size iterables, don't limit us by loops, signed 32b int limit
-    config = DraconicConfig(max_loops=99999999, max_const_len=1000, max_int_size=31)
+    config = DraconicConfig(max_loops=99999999, max_const_len=1000, max_int_size=32)
     return DraconicInterpreter(config=config)
 
 
