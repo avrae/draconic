@@ -1,13 +1,14 @@
 import pytest
 
-from draconic import DraconicInterpreter, SimpleInterpreter
-from draconic.helpers import DraconicConfig
+from draconic import DraconicInterpreter
 from draconic.exceptions import *
+from draconic.helpers import DraconicConfig
 
 
 @pytest.fixture()
 def i():
-    config = DraconicConfig(max_loops=99999999, max_const_len=1000)  # 1000-size iterables, don't limit us by loops
+    # 1000-size iterables, don't limit us by loops, signed 32b int limit
+    config = DraconicConfig(max_loops=99999999, max_const_len=1000, max_int_size=32)
     return DraconicInterpreter(config=config)
 
 
@@ -139,3 +140,103 @@ def test_types_again(i, e):
     e("a = {1: 1, 2: 2}")
     e("b = dict(((1, 1), (2, 2)))")
     assert type(i.names['a']) is type(i.names['b']) is i._dict
+
+
+def test_int_limits(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # result is too large
+    with pytest.raises(NumberTooHigh):
+        e("max_int + 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int - -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int * 2")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int * max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("2 ** 31")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int * 2")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int * -min_int")
+
+
+def test_int_limits_one_op(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # one operand is too large
+    e(f"over_max_int = {max_int + 1}")
+    e(f"under_min_int = {min_int - 1}")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 - over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("-1 + over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int * 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 * over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 - under_min_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("-1 + under_min_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int * 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 * under_min_int")
+
+
+def test_int_limits_not_floats(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # floats are fine
+    assert e("max_int * 1.5") == max_int * 1.5
+    assert e("max_int / 0.5") == max_int / 0.5
+    assert e("max_int // 0.5") == max_int // 0.5
+    assert type(e("max_int // 0.5")) is float
+
+    assert e("min_int * 1.5") == min_int * 1.5
+    assert e("min_int / 0.5") == min_int / 0.5
+    assert e("min_int // 0.5") == min_int // 0.5
+    assert type(e("min_int // 0.5")) is float

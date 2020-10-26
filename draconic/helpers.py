@@ -16,7 +16,7 @@ class DraconicConfig:
 
     def __init__(self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
                  max_power=1000, disallow_prefixes=None, disallow_methods=None,
-                 default_names=None, builtins_extend_default=True):
+                 default_names=None, builtins_extend_default=True, max_int_size=64):
         """
         Configuration object for the Draconic interpreter.
 
@@ -29,6 +29,8 @@ class DraconicConfig:
         :param list disallow_methods: A list of str - methods named these will not be callable
         :param dict default_names: A dict of str: Any - default names in the runtime
         :param bool builtins_extend_default: If False, ``builtins`` to the interpreter overrides default names
+        :param int max_int_size: The maximum allowed size of integers (-2^(pow-1) to 2^(pow-1)-1). Default 64.
+        Integers can technically reach up to double this size before size check. *Not* the max value!
         """
         if disallow_prefixes is None:
             disallow_prefixes = DISALLOW_PREFIXES
@@ -40,6 +42,8 @@ class DraconicConfig:
         self.max_statements = max_statements
         self.max_power_base = max_power_base
         self.max_power = max_power
+        self.min_int = -(2 ** (max_int_size - 1))
+        self.max_int = (2 ** (max_int_size - 1)) - 1
         self.disallow_prefixes = disallow_prefixes
         self.disallow_methods = disallow_methods
         self.builtins_extend_default = builtins_extend_default
@@ -88,7 +92,7 @@ class OperatorMixin:
         self.operators = {
             # binary
             ast.Add: self._safe_add,
-            ast.Sub: op.sub,
+            ast.Sub: self._safe_sub,
             ast.Mult: self._safe_mult,
             ast.Div: op.truediv,
             ast.FloorDiv: op.floordiv,
@@ -115,23 +119,48 @@ class OperatorMixin:
         """Exponent: limit power base and power to prevent CPU-locking computation"""
         if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
             _raise_in_context(NumberTooHigh, f"{a} ** {b} is too large of an exponent")
-        return a ** b
+        result = a ** b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This exponent would create a number too large")
+        return result
 
     def _safe_mult(self, a, b):
-        """Multiplication: limit the size of iterables that can be created"""
+        """Multiplication: limit the size of iterables that can be created, and the max size of ints"""
         # sequences can only be multiplied by ints, so this is safe
+        self._check_binop_operands(a, b)
         if isinstance(b, int) and b * approx_len_of(a) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
         if isinstance(a, int) and a * approx_len_of(b) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
-
-        return a * b
+        result = a * b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Multiplying these two would create a number too large")
+        return result
 
     def _safe_add(self, a, b):
-        """Addition: limit the size of iterables that can be created"""
+        """Addition: limit the size of iterables that can be created, and the max size of ints"""
+        self._check_binop_operands(a, b)
         if approx_len_of(a) + approx_len_of(b) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, "Adding these two would create something too long")
-        return a + b
+        result = a + b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Adding these two would create a number too large")
+        return result
+
+    def _safe_sub(self, a, b):
+        """Addition: limit the max size of ints"""
+        self._check_binop_operands(a, b)
+        result = a - b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Subtracting these two would create a number too large")
+        return result
+
+    def _check_binop_operands(self, a, b):
+        """Ensures both operands of a binary operation are safe (int limit)."""
+        if isinstance(a, int) and (a < self._config.min_int or a > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This number is too large")
+        if isinstance(b, int) and (b < self._config.min_int or b > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This number is too large")
 
 
 def approx_len_of(obj, visited=None):
