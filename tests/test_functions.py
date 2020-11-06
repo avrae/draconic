@@ -309,3 +309,20 @@ def test_lambda_calculus(ex):
             add(add(two, one), add(two, one))(add1, 0))  # (2 + 1) + (2 + 1)
     """
     assert ex(expr) == (2, 3, 6)
+
+
+def test_weird_breakouts(i, ex):
+    class Foo:  # random class with a private attr
+        _private = 1
+        public = 2
+
+    i._names['foo'] = Foo()
+
+    expr = """
+    def bar(baz=foo._private):
+        return baz
+        
+    return bar()
+    """
+    with pytest.raises(FeatureNotAvailable):
+        ex(expr)
