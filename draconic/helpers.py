@@ -16,7 +16,7 @@ class DraconicConfig:
 
     def __init__(self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
                  max_power=1000, disallow_prefixes=None, disallow_methods=None,
-                 default_names=None, builtins_extend_default=True, max_int_size=63):
+                 default_names=None, builtins_extend_default=True, max_int_size=64):
         """
         Configuration object for the Draconic interpreter.
 
@@ -29,8 +29,8 @@ class DraconicConfig:
         :param list disallow_methods: A list of str - methods named these will not be callable
         :param dict default_names: A dict of str: Any - default names in the runtime
         :param bool builtins_extend_default: If False, ``builtins`` to the interpreter overrides default names
-        :param int max_int_size: The maximum allowed size of integers (-2^pow to 2^pow-1). Default 63 (signed long).
-        Integers can technically reach up to double this size before size check.
+        :param int max_int_size: The maximum allowed size of integers (-2^(pow-1) to 2^(pow-1)-1). Default 64.
+        Integers can technically reach up to double this size before size check. *Not* the max value!
         """
         if disallow_prefixes is None:
             disallow_prefixes = DISALLOW_PREFIXES
@@ -42,8 +42,8 @@ class DraconicConfig:
         self.max_statements = max_statements
         self.max_power_base = max_power_base
         self.max_power = max_power
-        self.min_int = -(2 ** max_int_size)
-        self.max_int = (2 ** max_int_size) - 1
+        self.min_int = -(2 ** (max_int_size - 1))
+        self.max_int = (2 ** (max_int_size - 1)) - 1
         self.disallow_prefixes = disallow_prefixes
         self.disallow_methods = disallow_methods
         self.builtins_extend_default = builtins_extend_default
