@@ -42,6 +42,7 @@ class DraconicConfig:
         self.max_statements = max_statements
         self.max_power_base = max_power_base
         self.max_power = max_power
+        self.max_int_size = max_int_size
         self.min_int = -(2 ** (max_int_size - 1))
         self.max_int = (2 ** (max_int_size - 1)) - 1
         self.disallow_prefixes = disallow_prefixes
@@ -165,7 +166,7 @@ class OperatorMixin:
         """Left Bit-Shift: limit the size of integers/floats to prevent CPU-locking computation"""
         self._check_binop_operands(a, b)
 
-        if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
+        if isinstance(b, int) and b > self._config.max_int_size - 2:
             _raise_in_context(NumberTooHigh, f"{a} << {b} is too large of a shift")
 
         result = a << b
