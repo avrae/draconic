@@ -45,7 +45,22 @@ class TestAssignments:
         e('a *= 2')
         assert e('a') == 4
 
-        e('a /= 4')
+        e('a <<= 1')
+        assert e('a') == 8
+
+        e('a >>= 1')
+        assert e('a') == 4
+
+        e('a |= 1')
+        assert e('a') == 5
+
+        e('a ^= 6')
+        assert e('a') == 3
+
+        e('a &= 6')
+        assert e('a') == 2
+
+        e('a /= 2')
         assert e('a') == 1
 
         e('a += a + 1')
