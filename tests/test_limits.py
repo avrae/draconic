@@ -159,6 +159,9 @@ def test_int_limits(e):
         e("max_int * 2")
 
     with pytest.raises(NumberTooHigh):
+        e("max_int << 1")
+
+    with pytest.raises(NumberTooHigh):
         e("max_int * max_int")
 
     with pytest.raises(NumberTooHigh):
@@ -175,6 +178,9 @@ def test_int_limits(e):
 
     with pytest.raises(NumberTooHigh):
         e("min_int * 2")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int << 1")
 
     with pytest.raises(NumberTooHigh):
         e("min_int * -min_int")
