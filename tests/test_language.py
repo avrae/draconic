@@ -19,6 +19,18 @@ def test_genexp(e):
     assert e('list(a + 1 for a in [1,2,3])') == [2, 3, 4]
 
 
+def test_bitwise_operators(e):
+    assert e('4 << 1') == 8
+
+    assert e('8 >> 1') == 4
+
+    assert e('4 | 1') == 5
+
+    assert e('5 ^ 6') == 3
+
+    assert e('3 & 6') == 2
+
+
 class TestAssignments:
 
     def test_names(self, e):
@@ -45,7 +57,22 @@ class TestAssignments:
         e('a *= 2')
         assert e('a') == 4
 
-        e('a /= 4')
+        e('a <<= 1')
+        assert e('a') == 8
+
+        e('a >>= 1')
+        assert e('a') == 4
+
+        e('a |= 1')
+        assert e('a') == 5
+
+        e('a ^= 6')
+        assert e('a') == 3
+
+        e('a &= 6')
+        assert e('a') == 2
+
+        e('a /= 2')
         assert e('a') == 1
 
         e('a += a + 1')
