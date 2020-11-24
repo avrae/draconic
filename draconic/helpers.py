@@ -327,6 +327,9 @@ def safe_dict(config):
             self.__approx_len__ += other_lens
 
         def __or__(self, other):
+            if not hasattr(super(), "__or__"):
+                _raise_in_context(FeatureNotAvailable, "Dict Merge/Update is not yet available")
+
             if approx_len_of(self) + approx_len_of(other) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This dict is too large")
 
