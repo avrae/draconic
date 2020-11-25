@@ -112,9 +112,8 @@ def test_set(i, e):
     # we should always be operating using safe sets
     i.builtins['realset'] = {1, 2, 3}
     e("my_set = {3, 4, 5}")
-    # these operations don't work because sets use bitwise ops and we don't allow those
-    # assert isinstance(e("my_set | realset"), i._set)
-    # assert isinstance(e("realset | my_set"), i._set)
+    assert isinstance(e("my_set | realset"), i._set)
+    assert isinstance(e("realset | my_set"), i._set)
     e("my_set.update(realset)")
     assert isinstance(e("my_set"), i._set)
     assert isinstance(e("my_set.union(realset)"), i._set)
