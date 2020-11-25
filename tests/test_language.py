@@ -219,6 +219,31 @@ class TestCompoundAssignments:
         assert e('b') == [0, 2, 3]
 
 
+class TestSetDictOperations:
+    def test_set_operations(self, e):
+        e('a = {1, 2, 3}')
+        e('b = {3, 4, 5}')
+
+        assert e('a | b') == {1, 2, 3, 4, 5}
+
+        assert e('a & b') == {3}
+
+        assert e('a - b') == {1, 2}
+
+        assert e('a ^ b') == {1, 2, 4, 5}
+
+    if hasattr(dict, "__or__"):
+        def test_dict_operations(self, e):
+            e('a = {"a": 1, "b": 2}')
+            e('b = {"b": 3, "c": 4}')
+            e('c = a.copy()')
+
+            assert e('a | b') == {"a": 1, "b": 3, "c": 4}
+
+            e('c |= b')
+            assert e('c') == {"a": 1, "b": 3, "c": 4}
+
+
 class TestNamedExpressions:
     def test_names(self, e):
         if sys.version_info < (3,8,0): return

@@ -53,6 +53,7 @@ def test_set(i, e):
     i.builtins['range'] = range
     e("long = set(range(1000))")
     e("long2 = set(range(1000, 2000))")
+    e("longer = set(range(1001))")
 
     with pytest.raises(IterableTooLong):
         e("long.add(1000)")
@@ -67,10 +68,10 @@ def test_set(i, e):
         e("long | long2")
 
     with pytest.raises(IterableTooLong):
-        e("long.intersection(long)")
+        e("longer.intersection(longer)")
 
     with pytest.raises(IterableTooLong):
-        e("long & long")
+        e("longer & longer")
 
     with pytest.raises(IterableTooLong):
         e("long.symmetric_difference(long2)")
@@ -79,7 +80,34 @@ def test_set(i, e):
         e("long ^ long2")
 
     with pytest.raises(IterableTooLong):
+        e("longer.difference(long2)")
+
+    with pytest.raises(IterableTooLong):
+        e("longer - long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long |= long2")
+
+    with pytest.raises(IterableTooLong):
         e("long.update({1000})")
+
+    with pytest.raises(IterableTooLong):
+        e("longer &= longer")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.intersection_update(longer)")
+
+    with pytest.raises(IterableTooLong):
+        e("longer -= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.difference_update(long2)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference_update(long2)")
 
     # we should always be operating using safe sets
     i.builtins['realset'] = {1, 2, 3}
@@ -96,6 +124,7 @@ def test_dict(i, e):
     i.builtins['range'] = range
     e("long = dict((i, i) for i in range(1000))")
     e("long2 = {i: i for i in range(1000, 2000)}")
+    e("long_copy = long.copy()")
 
     with pytest.raises(IterableTooLong):
         e("long.update(long2)")
@@ -105,6 +134,9 @@ def test_dict(i, e):
 
     with pytest.raises(IterableTooLong):
         e("long | {'foo': 'bar'}")
+
+    with pytest.raises(IterableTooLong):
+        e("long_copy |= long2")
 
 
 def test_that_it_still_works_right(i, e):
