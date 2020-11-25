@@ -132,11 +132,12 @@ def test_dict(i, e):
     with pytest.raises(IterableTooLong):
         e("long.update({'foo': 'bar'})")
 
-    with pytest.raises(IterableTooLong):
-        e("long | {'foo': 'bar'}")
+    if hasattr(dict, "__or__"):
+        with pytest.raises(IterableTooLong):
+            e("long | {'foo': 'bar'}")
 
-    with pytest.raises(IterableTooLong):
-        e("long_copy |= long2")
+        with pytest.raises(IterableTooLong):
+            e("long_copy |= long2")
 
 
 def test_that_it_still_works_right(i, e):
