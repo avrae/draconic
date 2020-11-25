@@ -275,19 +275,46 @@ def safe_set(config):
             self.__approx_len__ += 1
 
         def union(self, *s):
-            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+            if (approx_len_of(self) + sum(approx_len_of(other) for other in s)) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             return SafeSet(super().union(*s))
 
         def intersection(self, *s):
-            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+            if approx_len_of(self) > config.max_const_len or any(approx_len_of(other) > config.max_const_len for other in s):
                 _raise_in_context(IterableTooLong, "This set is too large")
-            return SafeSet(super().union(*s))
+            return SafeSet(super().intersection(*s))
+
+        def difference(self, *s):
+            if approx_len_of(self) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().difference(*s))
 
         def symmetric_difference(self, *s):
             if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
-            return SafeSet(super().union(*s))
+            return SafeSet(super().symmetric_difference(*s))
+
+        def intersection_update(self, *s):
+            self.update(self.intersection(*s))
+
+        def difference_update(self, *s):
+            self.update(self.difference(*s))
+
+        def symmetric_difference_update(self, s):
+            self.update(self.symmetric_difference(s))
+
+        def __or__(self, other):
+            return self.union(other)
+
+        def __and__(self, other):
+            print("intersection")
+            return self.intersection(other)
+
+        def __sub__(self, other):
+            return self.difference(other)
+
+        def __xor__(self, other):
+            return self.symmetric_difference(other)
 
         def pop(self):
             retval = super().pop()
