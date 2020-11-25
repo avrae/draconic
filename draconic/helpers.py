@@ -307,7 +307,6 @@ def safe_set(config):
             return self.union(other)
 
         def __and__(self, other):
-            print("intersection")
             return self.intersection(other)
 
         def __sub__(self, other):
