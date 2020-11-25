@@ -306,7 +306,8 @@ def safe_set(config):
             super().difference_update(*s)
 
         def symmetric_difference_update(self, s):
-            if (total_approx := approx_len_of(self) + approx_len_of(s)) > config.max_const_len:
+            total_approx = approx_len_of(self) + approx_len_of(s)
+            if total_approx > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().symmetric_difference(s)
             self.__approx_len__ = total_approx
