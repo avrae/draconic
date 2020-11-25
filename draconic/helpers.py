@@ -295,13 +295,21 @@ def safe_set(config):
             return SafeSet(super().symmetric_difference(*s))
 
         def intersection_update(self, *s):
-            self.update(self.intersection(*s))
+            if approx_len_of(self) > config.max_const_len or any(approx_len_of(other) > config.max_const_len for other in s):
+                _raise_in_context(IterableTooLong, "This set is too large")
+            super().intersection_update(*s)
+            self.__approx_len__ = min(approx_len_of(self), min(approx_len_of(other) for other in s))
 
         def difference_update(self, *s):
-            self.update(self.difference(*s))
+            if approx_len_of(self) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            super().difference_update(*s)
 
         def symmetric_difference_update(self, s):
-            self.update(self.symmetric_difference(s))
+            if (total_approx := approx_len_of(self) + approx_len_of(s)) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            super().symmetric_difference(s)
+            self.__approx_len__ = total_approx
 
         def __or__(self, other):
             return self.union(other)
