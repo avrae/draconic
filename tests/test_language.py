@@ -1,5 +1,6 @@
-import pytest
 import sys
+
+import pytest
 
 from draconic.exceptions import *
 
@@ -19,16 +20,34 @@ def test_genexp(e):
     assert e('list(a + 1 for a in [1,2,3])') == [2, 3, 4]
 
 
-def test_bitwise_operators(e):
-    assert e('4 << 1') == 8
+class TestOperations:
+    """
+    Tests the operations with a custom handler:
 
-    assert e('8 >> 1') == 4
+    ast.Add: self._safe_add,
+    ast.Sub: self._safe_sub,
+    ast.Mult: self._safe_mult,
+    ast.Pow: self._safe_power,
+    ast.LShift: self._safe_lshift,
+    """
 
-    assert e('4 | 1') == 5
+    def test_arithmetic(self, e):
+        assert e('3 + 3') == 6
+        assert e('3 - 3') == 0
+        assert e('3 * 3') == 9
+        assert e('3 ** 3') == 27
+        assert e('3 << 3') == 0b11000
 
-    assert e('5 ^ 6') == 3
+    def test_bitwise_operators(self, e):
+        assert e('4 << 1') == 8
+        assert e('8 >> 1') == 4
+        assert e('4 | 1') == 5
+        assert e('5 ^ 6') == 3
+        assert e('3 & 6') == 2
 
-    assert e('3 & 6') == 2
+    def test_compound_type_operators(self, e):
+        assert e('[0] * 500') == [0] * 500
+        assert e('[1, 2] * 10') == [1, 2] * 10
 
 
 class TestAssignments:
@@ -221,7 +240,7 @@ class TestCompoundAssignments:
 
 class TestNamedExpressions:
     def test_names(self, e):
-        if sys.version_info < (3,8,0): return
+        if sys.version_info < (3, 8, 0): return
 
         assert e('(a := 1)') == 1
         assert e('a') == 1
