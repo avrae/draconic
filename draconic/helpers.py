@@ -252,6 +252,14 @@ def safe_list(config):
             super().clear()
             self.__approx_len__ = 0
 
+        def __mul__(self, n):
+            # to prevent the recalculation of the length on list mult we manually set a new instance's
+            # data and approx len (JIRA-54)
+            new = SafeList()
+            new.data = self.data * n
+            new.__approx_len__ = self.__approx_len__ * n
+            return new
+
     return SafeList
 
 
