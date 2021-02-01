@@ -171,7 +171,7 @@ def safe_dict(config):
 def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
-    class SafeStr(UserString):
+    class str(UserString):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
@@ -232,4 +232,4 @@ def safe_str(config):
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().zfill(width)
 
-    return SafeStr
+    return str
