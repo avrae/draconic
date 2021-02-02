@@ -91,3 +91,19 @@ def test_zfill(e):
     with pytest.raises(IterableTooLong):
         e("'-1'.zfill(1001)")
 
+
+def test_fstring_limits(i, e):
+    i.builtins.update({"a": 'foobar', "b": 42, "c": 3.14})
+    assert e("f'{a} {b} {c}'") == 'foobar 42 3.14'
+
+    assert e("f'{a:10}'") == 'foobar    '
+    with pytest.raises(IterableTooLong):
+        e("f'{a:1001}'")
+
+    assert e("f'{b:.10f}'") == '42.0000000000'
+    with pytest.raises(IterableTooLong):
+        e("f'{b:.1001f}'")
+
+    assert e("f'{c:.10f}'") == '3.1400000000'
+    with pytest.raises(IterableTooLong):
+        e("f'{c:.1001f}'")
