@@ -264,7 +264,7 @@ class TestTryingToBreakOut(DRYTest):
     def test_encode_bignums(self):
         # thanks gk
         if hasattr(1, 'from_bytes'):  # python3 only
-            with self.assertRaises(IterableTooLong):
+            with self.assertRaises(FeatureNotAvailable):
                 self.t('(1).from_bytes(b"123123123123123123123123"*999999, "big")', 0)
 
     def test_string_length(self):

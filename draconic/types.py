@@ -2,7 +2,7 @@ import operator as op
 from collections import UserList, UserString
 
 from .exceptions import *
-from .string import FORMAT_SPEC_RE
+from .string import FORMAT_SPEC_RE, JoinProxy, TranslateTableProxy
 
 __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
@@ -196,8 +196,9 @@ def safe_str(config):
             _raise_in_context(FeatureNotAvailable, "This method is not allowed")
 
         def join(self, seq):
-            i = list(seq)
-            if len(i) * len(self) + approx_len_of(i) > config.max_const_len:
+            full_seq = list(seq)  # consume the entire iterator so we can do length checking
+            i = JoinProxy(self.__class__, full_seq)  # proxy it so that .join gets the right types
+            if len(full_seq) * len(self) + approx_len_of(full_seq) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().join(i)
 
@@ -226,7 +227,8 @@ def safe_str(config):
             # but it is certainly an overestimate
             if approx_len_of(table) * len(self) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
-            return super().translate(table)
+            table_proxy = TranslateTableProxy(self.__class__, table)
+            return super().translate(table_proxy)
 
         def zfill(self, width):
             if width > config.max_const_len:
@@ -237,7 +239,7 @@ def safe_str(config):
             # validate that the format string is safe
             match = FORMAT_SPEC_RE.match(format_spec)
             if not match:
-                _raise_in_context(ValueError, "Invalid format specifier")
+                raise ValueError("Invalid format specifier")
 
             if match.group('width') and int(match.group('width')) > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
