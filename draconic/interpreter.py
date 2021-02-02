@@ -239,8 +239,7 @@ class SimpleInterpreter(OperatorMixin):
 
     def _eval_formattedvalue(self, node):
         if node.format_spec:
-            fmt = "{:" + self._eval(node.format_spec) + "}"
-            return fmt.format(self._eval(node.value))  # todo use custom formatter
+            return self._str(format(self._eval(node.value), str(self._eval(node.format_spec))))
         return self._eval(node.value)
 
 

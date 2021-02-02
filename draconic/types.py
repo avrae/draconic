@@ -2,6 +2,7 @@ import operator as op
 from collections import UserList, UserString
 
 from .exceptions import *
+from .string import FORMAT_SPEC_RE
 
 __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
@@ -231,5 +232,22 @@ def safe_str(config):
             if width > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().zfill(width)
+
+        def __format__(self, format_spec):
+            # validate that the format string is safe
+            match = FORMAT_SPEC_RE.match(format_spec)
+            if not match:
+                _raise_in_context(ValueError, "Invalid format specifier")
+
+            if match.group('width') and int(match.group('width')) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This str is too large")
+            if match.group('precision') and int(match.group('precision')) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This str is too large")
+
+            # format it using default str formatter
+            return self.data.__format__(format_spec)
+
+        def __mod__(self, fspec):
+            pass
 
     return str
