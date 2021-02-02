@@ -126,6 +126,8 @@ class SimpleInterpreter(OperatorMixin):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
                 f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node)
+        if isinstance(node.value, bytes):
+            raise FeatureNotAvailable("Creation of bytes literals is not allowed", node)
         return node.value
 
     def _eval_unaryop(self, node):
