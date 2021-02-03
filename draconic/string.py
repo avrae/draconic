@@ -2,10 +2,11 @@
 import re
 
 __all__ = (
-    'FORMAT_SPEC_RE', 'JoinProxy', 'TranslateTableProxy'
+    'FORMAT_SPEC_RE', 'PRINTF_TEMPLATE_RE', 'JoinProxy', 'TranslateTableProxy'
 )
 
 # ==== format spec ====
+# .format()-style
 # https://docs.python.org/3/library/string.html#format-specification-mini-language
 _FILL = r"."
 _ALIGN = r"[<>=^]"
@@ -22,6 +23,22 @@ FORMAT_SPEC_RE = re.compile(rf"((?P<fill>{_FILL})?(?P<align>{_ALIGN}))?"
                             rf"(?P<grouping_option>{_GROUPING_OPTION})?"
                             rf"(?P<precision>\.{_PRECISION})?"
                             rf"(?P<type>{_TYPE})?")
+
+# printf-style
+# https://docs.python.org/3/library/stdtypes.html#printf-style-string-formatting
+_PF_MAPPING_KEY = r"\([^)]*\)"  # any sequence of non-")"
+_PF_CONVERSION_FLAGS = r"[#0\- +]"
+_PF_WIDTH = r"\*|\d+"
+_PF_PRECISION = r"(?:\*|\d+)"
+_PF_LENGTH_MODIFIER = r"[hlL]"
+_PF_TYPE = r"[diouxXeEfFgGcrsa%]"
+PRINTF_TEMPLATE_RE = re.compile(rf"%"
+                                rf"(?P<mapping_key>{_PF_MAPPING_KEY})?"
+                                rf"(?P<conversion_flags>{_PF_CONVERSION_FLAGS})*"
+                                rf"(?P<width>{_PF_WIDTH})?"
+                                rf"(?P<precision>\.{_PF_PRECISION})?"
+                                rf"(?P<length_modifier>{_PF_LENGTH_MODIFIER})?"
+                                rf"(?P<type>{_PF_TYPE})")
 
 
 # ==== helpers ====

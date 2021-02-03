@@ -107,3 +107,41 @@ def test_fstring_limits(i, e):
     assert e("f'{c:.10f}'") == '3.1400000000'
     with pytest.raises(IterableTooLong):
         e("f'{c:.1001f}'")
+
+
+def test_printf_templating_limites(i, e):
+    i.builtins.update({"a": 'foobar', "b": 42, "c": 3.14})
+    assert e("'%s %d %f' % (a, b, c)") == '%s %d %f' % ('foobar', 42, 3.14)
+
+    assert e("'%10s' % a") == '    foobar'
+    with pytest.raises(IterableTooLong):
+        e("'%1001s' % a")
+    with pytest.raises(IterableTooLong):
+        e("'%1001d' % b")
+
+    assert e("'%.10f' % b") == '42.0000000000'
+    with pytest.raises(IterableTooLong):
+        e("'%.1001f' % b")
+
+    assert e("'%.10f' % c") == '3.1400000000'
+    with pytest.raises(IterableTooLong):
+        e("'%.1001f' % c")
+
+    with pytest.raises(FeatureNotAvailable):
+        e("'%*f' % (a, b)")
+    with pytest.raises(FeatureNotAvailable):
+        e("'%.*f' % (a, b)")
+    with pytest.raises(FeatureNotAvailable):
+        e("'%*.*f' % (a, b, b)")
+
+
+def test_getattr(i, e):
+    """Check that our weird type shenanigans haven't borked anything when getattring w/ str key"""
+    i.builtins.update({"d": {"abc": "abc", 123: 123, ("1", 1): ("1", 1)},
+                       "l": [1, 2, "3"]})
+    assert e("d['abc']") == 'abc'
+    assert e("d[123]") == 123
+    assert e("d[('1', 1)]") == ("1", 1)
+
+    assert e("l[0]") == 1
+    assert e("l[-1]") == '3'

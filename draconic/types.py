@@ -2,7 +2,7 @@ import operator as op
 from collections import UserList, UserString
 
 from .exceptions import *
-from .string import FORMAT_SPEC_RE, JoinProxy, TranslateTableProxy
+from .string import FORMAT_SPEC_RE, JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
 
 __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
@@ -241,15 +241,40 @@ def safe_str(config):
             if not match:
                 raise ValueError("Invalid format specifier")
 
-            if match.group('width') and int(match.group('width')) > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This str is too large")
-            if match.group('precision') and int(match.group('precision')) > config.max_const_len:
+            precision_len = 0
+            if w := match.group('width'):
+                precision_len += int(w)
+            if p := match.group('precision'):
+                precision_len += int(p.lstrip('.'))
+            if precision_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
 
             # format it using default str formatter
             return self.data.__format__(format_spec)
 
-        def __mod__(self, fspec):
-            pass
+        def __mod__(self, values):
+            new_len_bound = len(self) + approx_len_of(values)
+            # pass 1: will inserting all the values bork something?
+            if new_len_bound > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This str is too large")
+
+            # validate that the template is safe (no massive widths/precisions)
+            for match in PRINTF_TEMPLATE_RE.finditer(self.data):
+                if w := match.group('width'):
+                    if w == '*':
+                        _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
+                    else:
+                        new_len_bound += int(w)
+
+                if p := match.group('precision'):
+                    if p == '.*':
+                        _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
+                    else:
+                        new_len_bound += int(p.lstrip('.'))
+
+                if new_len_bound > config.max_const_len:
+                    _raise_in_context(IterableTooLong, "This str is too large")
+
+            return super().__mod__(values)
 
     return str
