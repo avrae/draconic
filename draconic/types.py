@@ -242,9 +242,11 @@ def safe_str(config):
                 raise ValueError("Invalid format specifier")
 
             precision_len = 0
-            if w := match.group('width'):
+            w = match.group('width')
+            p = match.group('precision')
+            if w:
                 precision_len += int(w)
-            if p := match.group('precision'):
+            if p:
                 precision_len += int(p.lstrip('.'))
             if precision_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
@@ -260,13 +262,15 @@ def safe_str(config):
 
             # validate that the template is safe (no massive widths/precisions)
             for match in PRINTF_TEMPLATE_RE.finditer(self.data):
-                if w := match.group('width'):
+                w = match.group('width')
+                if w:
                     if w == '*':
                         _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
                     else:
                         new_len_bound += int(w)
 
-                if p := match.group('precision'):
+                p = match.group('precision')
+                if p:
                     if p == '.*':
                         _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
                     else:
