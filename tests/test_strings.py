@@ -108,10 +108,20 @@ def test_fstring_limits(i, e):
     with pytest.raises(IterableTooLong):
         e("f'{c:.1001f}'")
 
+    assert e("f'{c:10.10f}'") == '3.1400000000'
+    with pytest.raises(IterableTooLong):
+        e("f'{c:500.501f}'")
 
-def test_printf_templating_limites(i, e):
+    with pytest.raises(AnnotatedException, match="Invalid format specifier"):
+        e("f'{c:foobar}'")
+
+
+def test_printf_templating_limits(i, e):
     i.builtins.update({"a": 'foobar', "b": 42, "c": 3.14})
     assert e("'%s %d %f' % (a, b, c)") == '%s %d %f' % ('foobar', 42, 3.14)
+
+    with pytest.raises(IterableTooLong):
+        e("'%(foo)s %(foo)s' % {'foo': 'a'*500}")
 
     assert e("'%10s' % a") == '    foobar'
     with pytest.raises(IterableTooLong):
@@ -133,6 +143,29 @@ def test_printf_templating_limites(i, e):
         e("'%.*f' % (a, b)")
     with pytest.raises(FeatureNotAvailable):
         e("'%*.*f' % (a, b, b)")
+
+
+def test_printf_templating_edges(e):
+    with pytest.raises(AnnotatedException, match="format requires a mapping"):
+        e("'%(foo)s' % 0")
+
+    with pytest.raises(AnnotatedException, match="'foo'"):
+        e("'%(foo)s' % {}")
+
+    with pytest.raises(AnnotatedException, match="not enough arguments for format string"):
+        e("'%s %s' % 0")
+
+    with pytest.raises(AnnotatedException, match="not enough arguments for format string"):
+        e("'%s %s' % [0]")
+
+    with pytest.raises(AnnotatedException, match="format requires a mapping"):
+        e("'%s %(foo)s' % 0")
+
+    assert e("'%s %(foo)s' % {'foo': 0}") == "{'foo': 0} 0"
+    with pytest.raises(AnnotatedException, match="not enough arguments for format string"):
+        e("'%(foo)s %s' % {'foo': 0}")
+
+    assert e("'%%(foo)s %s' % {'foo': 0}") == "%(foo)s {'foo': 0}"  # this was actually a typo, but it's a good test
 
 
 def test_getattr(i, e):

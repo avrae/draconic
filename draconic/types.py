@@ -1,8 +1,9 @@
+import collections
 import operator as op
 from collections import UserList, UserString
 
 from .exceptions import *
-from .string import FORMAT_SPEC_RE, JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
+from .string import JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
 
 __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
@@ -236,31 +237,16 @@ def safe_str(config):
             return super().zfill(width)
 
         def __format__(self, format_spec):
-            # validate that the format string is safe
-            match = FORMAT_SPEC_RE.match(format_spec)
-            if not match:
-                raise ValueError("Invalid format specifier")
-
-            precision_len = 0
-            w = match.group('width')
-            p = match.group('precision')
-            if w:
-                precision_len += int(w)
-            if p:
-                precision_len += int(p.lstrip('.'))
-            if precision_len > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This str is too large")
-
             # format it using default str formatter
             return self.data.__format__(format_spec)
 
         def __mod__(self, values):
-            new_len_bound = len(self) + approx_len_of(values)
-            # pass 1: will inserting all the values bork something?
-            if new_len_bound > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This str is too large")
+            new_len_bound = len(self)
+            values_is_sequence = isinstance(values, collections.Sequence)
+            values_is_mapping = isinstance(values, collections.Mapping)
 
             # validate that the template is safe (no massive widths/precisions)
+            i = 0
             for match in PRINTF_TEMPLATE_RE.finditer(self.data):
                 w = match.group('width')
                 if w:
@@ -271,10 +257,30 @@ def safe_str(config):
 
                 p = match.group('precision')
                 if p:
-                    if p == '.*':
+                    if p == '*':
                         _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
                     else:
-                        new_len_bound += int(p.lstrip('.'))
+                        new_len_bound += int(p)
+
+                mapping_key = match.group('mapping_key')
+                if mapping_key is not None:  # '%(foo)s %(foo)s'
+                    if not values_is_mapping:  # '%(foo)s' % 0
+                        raise TypeError("format requires a mapping")
+                    val = values[mapping_key]
+                    new_len_bound += approx_len_of(val)
+                elif values_is_sequence:  # '%s %s'
+                    try:
+                        val = values[i]
+                    except IndexError:  # '%s %s' % [0]
+                        raise TypeError("not enough arguments for format string")
+                    new_len_bound += approx_len_of(val)
+                elif i > 0:  # '%s %s' % 0
+                    raise TypeError("not enough arguments for format string")
+                else:  # '%s' % 0
+                    new_len_bound += approx_len_of(values)
+
+                if match.group('type') != '%':  # percent literals do not increase index
+                    i += 1
 
                 if new_len_bound > config.max_const_len:
                     _raise_in_context(IterableTooLong, "This str is too large")

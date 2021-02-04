@@ -2,6 +2,7 @@ import ast
 
 from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin
+from .string import check_format_spec
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -241,7 +242,9 @@ class SimpleInterpreter(OperatorMixin):
 
     def _eval_formattedvalue(self, node):
         if node.format_spec:
-            return self._str(format(self._eval(node.value), str(self._eval(node.format_spec))))
+            format_spec = str(self._eval(node.format_spec))
+            check_format_spec(self._config, format_spec)
+            return self._str(format(self._eval(node.value), format_spec))
         return self._eval(node.value)
 
 
