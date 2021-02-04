@@ -258,7 +258,7 @@ def test_int_limits_not_floats(e):
     assert type(e("min_int // 0.5")) is float
 
 
-@pytest.mark.timeout(1)  # list mult should be fast, even if we do it a lot
+@pytest.mark.timeout(3)  # list mult should be fast, even if we do it a lot
 def test_list_mult_speed():
     config = DraconicConfig(max_loops=10000, max_const_len=10000)
     i = DraconicInterpreter(config=config)
