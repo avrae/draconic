@@ -178,3 +178,5 @@ def test_getattr(i, e):
 
     assert e("l[0]") == 1
     assert e("l[-1]") == '3'
+
+    assert e("({'a': 1}).a") == 1  # dot notation getattr
