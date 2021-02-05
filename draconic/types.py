@@ -1,4 +1,4 @@
-import collections
+import collections.abc
 import operator as op
 from collections import UserList, UserString
 
@@ -170,10 +170,13 @@ def safe_dict(config):
     return SafeDict
 
 
+_real_str = str
+
+
 def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
-    class str(UserString):
+    class str(UserString, _real_str):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
@@ -242,8 +245,8 @@ def safe_str(config):
 
         def __mod__(self, values):
             new_len_bound = len(self)
-            values_is_sequence = isinstance(values, collections.Sequence)
-            values_is_mapping = isinstance(values, collections.Mapping)
+            values_is_sequence = isinstance(values, collections.abc.Sequence)
+            values_is_mapping = isinstance(values, collections.abc.Mapping)
 
             # validate that the template is safe (no massive widths/precisions)
             i = 0
@@ -285,6 +288,6 @@ def safe_str(config):
                 if new_len_bound > config.max_const_len:
                     _raise_in_context(IterableTooLong, "This str is too large")
 
-            return super().__mod__(values)
+            return _real_str.__mod__(self.data, values)
 
     return str

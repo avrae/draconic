@@ -12,6 +12,7 @@ def i():
     return DraconicInterpreter(config=config)
 
 
+# ==== explody things ====
 def test_center(e):
     assert e("'foo'.center(5)") == ' foo '
     with pytest.raises(IterableTooLong):
@@ -168,6 +169,7 @@ def test_printf_templating_edges(e):
     assert e("'%%(foo)s %s' % {'foo': 0}") == "%(foo)s {'foo': 0}"  # this was actually a typo, but it's a good test
 
 
+# ==== correctness ====
 def test_getattr(i, e):
     """Check that our weird type shenanigans haven't borked anything when getattring w/ str key"""
     i.builtins.update({"d": {"abc": "abc", 123: 123, ("1", 1): ("1", 1)},
@@ -180,3 +182,10 @@ def test_getattr(i, e):
     assert e("l[-1]") == '3'
 
     assert e("({'a': 1}).a") == 1  # dot notation getattr
+
+
+def test_strip(e):
+    assert e("''.strip('')") == ''
+    assert e("' aaa  '.strip()") == 'aaa'
+    assert e("'foobar'.lstrip('f')") == 'oobar'
+    assert e("'foobar'.rstrip('ra')") == 'foob'
