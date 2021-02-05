@@ -1,7 +1,8 @@
 import ast
 
 from .exceptions import *
-from .helpers import DraconicConfig, OperatorMixin, safe_dict, safe_list, safe_set
+from .helpers import DraconicConfig, OperatorMixin
+from .string import check_format_spec
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -50,6 +51,8 @@ class SimpleInterpreter(OperatorMixin):
             # container.key:
             ast.Attribute: self._eval_attribute,
         }
+
+        self._str = self._config.str
 
     @staticmethod
     def parse(expr):
@@ -118,12 +121,14 @@ class SimpleInterpreter(OperatorMixin):
         if len(node.s) > self._config.max_const_len:
             raise IterableTooLong(
                 f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node)
-        return node.s
+        return self._str(node.s)
 
     def _eval_constant(self, node):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
                 f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node)
+        if isinstance(node.value, bytes):
+            raise FeatureNotAvailable("Creation of bytes literals is not allowed", node)
         return node.value
 
     def _eval_unaryop(self, node):
@@ -237,8 +242,9 @@ class SimpleInterpreter(OperatorMixin):
 
     def _eval_formattedvalue(self, node):
         if node.format_spec:
-            fmt = "{:" + self._eval(node.format_spec) + "}"
-            return fmt.format(self._eval(node.value))
+            format_spec = str(self._eval(node.format_spec))
+            check_format_spec(self._config, format_spec)
+            return self._str(format(self._eval(node.value), format_spec))
         return self._eval(node.value)
 
 
@@ -356,7 +362,9 @@ class DraconicInterpreter(SimpleInterpreter):
         # ensure that it's always an instance of our safe compound types being returned
         # note: makes a copy, so the original copy won't be updated
         # we don't use isinstance because we're looking for very specific classes
-        if type(val) is list:
+        if type(val) is str:
+            return self._str(val)
+        elif type(val) is list:
             return self._list(val)
         elif type(val) is dict:
             return self._dict(val)

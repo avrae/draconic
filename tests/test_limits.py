@@ -141,6 +141,13 @@ def test_types_again(i, e):
     e("b = dict(((1, 1), (2, 2)))")
     assert type(i.names['a']) is type(i.names['b']) is i._dict
 
+    e("a = 'foobar'")
+    e("b = str(123)")
+    assert type(i.names['a']) is type(i.names['b']) is i._str
+
+    i.builtins['typeof'] = lambda o: type(o).__name__
+    assert e('typeof(a)') == 'str'
+
 
 def test_int_limits(e):
     max_int = (2 ** 31) - 1
@@ -251,7 +258,7 @@ def test_int_limits_not_floats(e):
     assert type(e("min_int // 0.5")) is float
 
 
-@pytest.mark.timeout(1)  # list mult should be fast, even if we do it a lot
+@pytest.mark.timeout(3)  # list mult should be fast, even if we do it a lot
 def test_list_mult_speed():
     config = DraconicConfig(max_loops=10000, max_const_len=10000)
     i = DraconicInterpreter(config=config)
