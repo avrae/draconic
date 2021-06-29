@@ -152,6 +152,10 @@ class TestCompoundAssignments:
         assert e('c') == (3, 3)
         assert e('d') == 'foo'
 
+        e('a = {"foo": "bar"}')
+        e('b = a.popitem()')
+        assert e('b') == ("foo", "bar")
+
     def test_bad_unpacks(self, e):
         with pytest.raises(DraconicValueError):
             e('a, b, c = (1, 2)')
@@ -161,6 +165,10 @@ class TestCompoundAssignments:
 
         with pytest.raises(DraconicValueError):
             e('a, b = 1')
+
+        with pytest.raises(AnnotatedException):
+            e('a = {}')
+            e('b = a.popitem()')
 
     def test_iterator_unpack(self, i, e):
         i.builtins['range'] = range
