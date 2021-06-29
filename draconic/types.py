@@ -158,8 +158,14 @@ def safe_dict(config):
             self.__approx_len__ += other_len
             return super().__setitem__(key, value)
 
-        def pop(self, k):
-            retval = super().pop(k)
+        def pop(self, k, default = None):
+            retval = super().pop(k, default)
+            if not retval == default:
+                self.__approx_len__ -= 1
+            return retval
+
+        def popitem(self):
+            retval = super().popitem()
             self.__approx_len__ -= 1
             return retval
 
