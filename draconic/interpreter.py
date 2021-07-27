@@ -77,7 +77,10 @@ class SimpleInterpreter(OperatorMixin):
             expr = self.parse(expr)
 
         self._preflight()
-        expression = expr[0]
+        try:
+            expression = expr[0]
+        except IndexError:  # if there is no expression, evaluate to None
+            return None
         return self._eval(expression)
 
     def _eval(self, node):

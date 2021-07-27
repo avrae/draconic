@@ -20,6 +20,10 @@ def test_genexp(e):
     assert e('list(a + 1 for a in [1,2,3])') == [2, 3, 4]
 
 
+def test_empty(e):
+    assert e('') is None
+
+
 class TestOperations:
     """
     Tests the operations with a custom handler:
