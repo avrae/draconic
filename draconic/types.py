@@ -159,11 +159,11 @@ def safe_dict(config):
             self.__approx_len__ += other_len
             return super().__setitem__(key, value)
 
-        def pop(self, key, default=_sentinel):
+        def pop(self, k, default=_sentinel):
             if default is not _sentinel:
-                retval = super().pop(key, default)
+                retval = super().pop(k, default)
             else:
-                retval = super().pop(key)
+                retval = super().pop(k)
             self.__approx_len__ -= 1
             return retval
 
