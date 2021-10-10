@@ -164,7 +164,7 @@ def safe_dict(config):
                 retval = super().pop(k, default)
             else:
                 retval = super().pop(k)
-            self.__approx_len__ -= 1
+                self.__approx_len__ -= 1
             return retval
 
         def __delitem__(self, key):
