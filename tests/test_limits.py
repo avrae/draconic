@@ -106,6 +106,26 @@ def test_that_it_still_works_right(i, e):
     assert e("d") == {1: 1, 2: 2}
     assert isinstance(i.names['d'], i._dict)
 
+    pop = e("d.pop(2)")
+    assert e("d") == {1: 1}
+    assert pop == 2
+    assert isinstance(i.names['d'], i._dict)
+
+    e("d.update({2: 2})")
+
+    pop = e("d.pop(2, 3)")
+    assert e("d") == {1: 1}
+    assert pop == 2
+    assert isinstance(i.names['d'], i._dict)
+
+    pop = e("d.pop(2, 3)")
+    assert e("d") == {1: 1}
+    assert pop == 3
+    assert isinstance(i.names['d'], i._dict)
+
+    with pytest.raises(AnnotatedException):
+        e("d.pop(2)")
+
 
 def test_types(i, e):
     # when we have a compound type as a builtin, users shouldn't be able to modify it directly...

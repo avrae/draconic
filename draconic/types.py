@@ -9,6 +9,7 @@ __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
 )
 
+_sentinel = object()
 
 # ---- size helper ----
 def approx_len_of(obj, visited=None):
@@ -158,9 +159,12 @@ def safe_dict(config):
             self.__approx_len__ += other_len
             return super().__setitem__(key, value)
 
-        def pop(self, k):
-            retval = super().pop(k)
-            self.__approx_len__ -= 1
+        def pop(self, k, default=_sentinel):
+            if default is not _sentinel:
+                retval = super().pop(k, default)
+            else:
+                retval = super().pop(k)
+                self.__approx_len__ -= 1
             return retval
 
         def __delitem__(self, key):
