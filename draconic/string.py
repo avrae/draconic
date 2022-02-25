@@ -17,14 +17,16 @@ _WIDTH = r"\d+"
 _GROUPING_OPTION = r"[_,]"
 _PRECISION = r"\d+"
 _TYPE = r"[bcdeEfFgGnosxX%]"
-FORMAT_SPEC_RE = re.compile(rf"(?:(?P<fill>{_FILL})?(?P<align>{_ALIGN}))?"
-                            rf"(?P<sign>{_SIGN})?"
-                            rf"(?P<alt_form>#)?"
-                            rf"(?P<zero_pad>0)?"
-                            rf"(?P<width>{_WIDTH})?"
-                            rf"(?P<grouping_option>{_GROUPING_OPTION})?"
-                            rf"(?:\.(?P<precision>{_PRECISION}))?"
-                            rf"(?P<type>{_TYPE})?")
+FORMAT_SPEC_RE = re.compile(
+    rf"(?:(?P<fill>{_FILL})?(?P<align>{_ALIGN}))?"
+    rf"(?P<sign>{_SIGN})?"
+    rf"(?P<alt_form>#)?"
+    rf"(?P<zero_pad>0)?"
+    rf"(?P<width>{_WIDTH})?"
+    rf"(?P<grouping_option>{_GROUPING_OPTION})?"
+    rf"(?:\.(?P<precision>{_PRECISION}))?"
+    rf"(?P<type>{_TYPE})?"
+)
 
 
 def check_format_spec(config, format_spec):
@@ -52,13 +54,15 @@ _PF_WIDTH = r"\*|\d+"
 _PF_PRECISION = r"\*|\d+"
 _PF_LENGTH_MODIFIER = r"[hlL]"
 _PF_TYPE = r"[diouxXeEfFgGcrsa%]"
-PRINTF_TEMPLATE_RE = re.compile(rf"%"
-                                rf"(?:\((?P<mapping_key>{_PF_MAPPING_KEY})\))?"
-                                rf"(?P<conversion_flags>{_PF_CONVERSION_FLAGS})*"
-                                rf"(?P<width>{_PF_WIDTH})?"
-                                rf"(?:\.(?P<precision>{_PF_PRECISION}))?"
-                                rf"(?P<length_modifier>{_PF_LENGTH_MODIFIER})?"
-                                rf"(?P<type>{_PF_TYPE})")
+PRINTF_TEMPLATE_RE = re.compile(
+    rf"%"
+    rf"(?:\((?P<mapping_key>{_PF_MAPPING_KEY})\))?"
+    rf"(?P<conversion_flags>{_PF_CONVERSION_FLAGS})*"
+    rf"(?P<width>{_PF_WIDTH})?"
+    rf"(?:\.(?P<precision>{_PF_PRECISION}))?"
+    rf"(?P<length_modifier>{_PF_LENGTH_MODIFIER})?"
+    rf"(?P<type>{_PF_TYPE})"
+)
 
 
 # ==== helpers ====

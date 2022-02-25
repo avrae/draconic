@@ -11,6 +11,7 @@ __all__ = (
 
 _sentinel = object()
 
+
 # ---- size helper ----
 def approx_len_of(obj, visited=None):
     """Gets the approximate size of an object (including recursive objects)."""

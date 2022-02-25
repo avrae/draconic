@@ -88,8 +88,10 @@ class SimpleInterpreter(OperatorMixin):
         try:
             handler = self.nodes[type(node)]
         except KeyError:
-            raise FeatureNotAvailable("Sorry, {0} is not available in this "
-                                      "evaluator".format(type(node).__name__), node)
+            raise FeatureNotAvailable(
+                "Sorry, {0} is not available in this "
+                "evaluator".format(type(node).__name__), node
+            )
 
         try:
             return handler(node)
@@ -123,13 +125,15 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_str(self, node):
         if len(node.s) > self._config.max_const_len:
             raise IterableTooLong(
-                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node)
+                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node
+            )
         return self._str(node.s)
 
     def _eval_constant(self, node):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
-                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node)
+                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node
+            )
         if isinstance(node.value, bytes):
             raise FeatureNotAvailable("Creation of bytes literals is not allowed", node)
         return node.value
@@ -138,8 +142,10 @@ class SimpleInterpreter(OperatorMixin):
         return self.operators[type(node.op)](self._eval(node.operand))
 
     def _eval_binop(self, node):
-        return self.operators[type(node.op)](self._eval(node.left),
-                                             self._eval(node.right))
+        return self.operators[type(node.op)](
+            self._eval(node.left),
+            self._eval(node.right)
+        )
 
     def _eval_boolop(self, node):
         vout = False
@@ -238,8 +244,10 @@ class SimpleInterpreter(OperatorMixin):
             val = str(self._eval(n))
             length += len(val)
             if length > self._config.max_const_len:
-                raise IterableTooLong(f"f-string in statement is too long ({length} > {self._config.max_const_len})",
-                                      node)
+                raise IterableTooLong(
+                    f"f-string in statement is too long ({length} > {self._config.max_const_len})",
+                    node
+                )
             evaluated_values.append(val)
         return ''.join(evaluated_values)
 
@@ -277,35 +285,39 @@ class DraconicInterpreter(SimpleInterpreter):
         if initial_names is None:
             initial_names = {}
 
-        self.nodes.update({
-            # compound types:
-            ast.Dict: self._eval_dict,
-            ast.Tuple: self._eval_tuple,
-            ast.List: self._eval_list,
-            ast.Set: self._eval_set,
-            # comprehensions:
-            ast.ListComp: self._eval_listcomp,
-            ast.SetComp: self._eval_setcomp,
-            ast.DictComp: self._eval_dictcomp,
-            ast.GeneratorExp: self._eval_generatorexp,
-            # assignments:
-            ast.Assign: self._eval_assign,
-            ast.AugAssign: self._eval_augassign,
-            self._FinalValue: lambda v: v.value,
-            # control:
-            ast.Return: self._exec_return,
-            ast.If: self._exec_if,
-            ast.For: self._exec_for,
-            ast.While: self._exec_while,
-            ast.Break: self._exec_break,
-            ast.Continue: self._exec_continue,
-            ast.Pass: lambda node: None
-        })
+        self.nodes.update(
+            {
+                # compound types:
+                ast.Dict: self._eval_dict,
+                ast.Tuple: self._eval_tuple,
+                ast.List: self._eval_list,
+                ast.Set: self._eval_set,
+                # comprehensions:
+                ast.ListComp: self._eval_listcomp,
+                ast.SetComp: self._eval_setcomp,
+                ast.DictComp: self._eval_dictcomp,
+                ast.GeneratorExp: self._eval_generatorexp,
+                # assignments:
+                ast.Assign: self._eval_assign,
+                ast.AugAssign: self._eval_augassign,
+                self._FinalValue: lambda v: v.value,
+                # control:
+                ast.Return: self._exec_return,
+                ast.If: self._exec_if,
+                ast.For: self._exec_for,
+                ast.While: self._exec_while,
+                ast.Break: self._exec_break,
+                ast.Continue: self._exec_continue,
+                ast.Pass: lambda node: None
+            }
+        )
 
         if hasattr(ast, 'NamedExpr'):
-            self.nodes.update({
-                ast.NamedExpr: self._eval_namedexpr
-            })
+            self.nodes.update(
+                {
+                    ast.NamedExpr: self._eval_namedexpr
+                }
+            )
 
         self.assign_nodes = {
             ast.Name: self._assign_name,
@@ -330,8 +342,12 @@ class DraconicInterpreter(SimpleInterpreter):
         except self._Return as r:
             return r.value
         except (self._Break, self._Continue):
-            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
-                                                  ("<string>", 1, 1, expr)))
+            raise DraconicSyntaxError(
+                SyntaxError(
+                    "Loop control outside loop",
+                    ("<string>", 1, 1, expr)
+                )
+            )
 
     def execute(self, expr):
         """
@@ -348,8 +364,12 @@ class DraconicInterpreter(SimpleInterpreter):
         except self._Return as r:
             return r.value
         except (self._Break, self._Continue):
-            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
-                                                  ("<string>", 1, 1, expr)))
+            raise DraconicSyntaxError(
+                SyntaxError(
+                    "Loop control outside loop",
+                    ("<string>", 1, 1, expr)
+                )
+            )
 
     def _preflight(self):
         self._num_stmts = 0
@@ -521,7 +541,8 @@ class DraconicInterpreter(SimpleInterpreter):
                     raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__), names)
                 if not len(target.elts) == len(value):
                     raise DraconicValueError(
-                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)), names)
+                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)), names
+                    )
                 for t, v in zip(target.elts, value):
                     do_assign(t, v)
 

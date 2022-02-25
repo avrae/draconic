@@ -14,9 +14,11 @@ DISALLOW_METHODS = ['format', 'format_map', 'mro']
 class DraconicConfig:
     """A configuration object to pass into the Draconic interpreter."""
 
-    def __init__(self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
-                 max_power=1000, disallow_prefixes=None, disallow_methods=None,
-                 default_names=None, builtins_extend_default=True, max_int_size=64):
+    def __init__(
+        self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
+        max_power=1000, disallow_prefixes=None, disallow_methods=None,
+        default_names=None, builtins_extend_default=True, max_int_size=64
+    ):
         """
         Configuration object for the Draconic interpreter.
 
