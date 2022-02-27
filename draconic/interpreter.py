@@ -293,6 +293,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 # assignments:
                 ast.Assign: self._eval_assign,
                 ast.AugAssign: self._eval_augassign,
+                ast.NamedExpr: self._eval_namedexpr,
                 # control:
                 ast.Return: self._exec_return,
                 ast.If: self._exec_if,
@@ -303,13 +304,6 @@ class DraconicInterpreter(SimpleInterpreter):
                 ast.Pass: lambda node: None
             }
         )
-
-        if hasattr(ast, 'NamedExpr'):
-            self.nodes.update(
-                {
-                    ast.NamedExpr: self._eval_namedexpr
-                }
-            )
 
         self.assign_nodes = {
             ast.Name: self._assign_name,

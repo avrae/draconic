@@ -244,8 +244,6 @@ class TestCompoundAssignments:
 
 class TestNamedExpressions:
     def test_names(self, e):
-        if sys.version_info < (3, 8, 0): return
-
         assert e('(a := 1)') == 1
         assert e('a') == 1
 
@@ -260,8 +258,6 @@ class TestNamedExpressions:
             e("(d[0] := 0)")
 
     def test_assigning_expressions(self, e):
-        if sys.version_info < (3, 8, 0): return
-
         e('a = 1')
         e('b = 2')
         e('c = "foo"')
