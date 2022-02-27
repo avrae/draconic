@@ -260,27 +260,25 @@ class SimpleInterpreter(OperatorMixin):
 
 
 # ===== multiple-line execution, assignment, compound types =====
+_break_sentinel = object()
+_continue_sentinel = object()
+
+
+class _Return:
+    def __init__(self, retval):
+        self.value = retval
+
+
+class _FinalValue:
+    def __init__(self, value):
+        self.value = value
+
+
 class DraconicInterpreter(SimpleInterpreter):
     """The Draconic interpreter. Capable of running Draconic code."""
 
-    class _FinalValue:
-        def __init__(self, value):
-            self.value = value
-
-    class _Return(BaseException):
-        """We propogate a ``return`` up by using a custom exception."""
-
-        def __init__(self, retval):
-            self.value = retval
-
-    class _Break(BaseException):
-        pass
-
-    class _Continue(BaseException):
-        pass
-
     def __init__(self, builtins=None, config=None, initial_names=None):
-        super(DraconicInterpreter, self).__init__(builtins, config)
+        super().__init__(builtins, config)
 
         if initial_names is None:
             initial_names = {}
@@ -300,7 +298,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 # assignments:
                 ast.Assign: self._eval_assign,
                 ast.AugAssign: self._eval_augassign,
-                self._FinalValue: lambda v: v.value,
+                _FinalValue: lambda v: v.value,
                 # control:
                 ast.Return: self._exec_return,
                 ast.If: self._exec_if,
@@ -337,17 +335,17 @@ class DraconicInterpreter(SimpleInterpreter):
         self._names = initial_names
 
     def eval(self, expr):
-        try:
-            return super().eval(expr)
-        except self._Return as r:
-            return r.value
-        except (self._Break, self._Continue):
+        retval = super().eval(expr)
+        if isinstance(retval, _Return):
+            return retval.value
+        elif retval is _break_sentinel or retval is _continue_sentinel:
             raise DraconicSyntaxError(
                 SyntaxError(
                     "Loop control outside loop",
                     ("<string>", 1, 1, expr)
                 )
             )
+        return retval
 
     def execute(self, expr):
         """
@@ -359,17 +357,16 @@ class DraconicInterpreter(SimpleInterpreter):
             expr = self.parse(expr)
 
         self._preflight()
-        try:
-            self._exec(expr)
-        except self._Return as r:
-            return r.value
-        except (self._Break, self._Continue):
+        retval = self._exec(expr)
+        if retval is _break_sentinel or retval is _continue_sentinel:
             raise DraconicSyntaxError(
                 SyntaxError(
                     "Loop control outside loop",
                     ("<string>", 1, 1, expr)
                 )
             )
+        if isinstance(retval, _Return):
+            return retval.value
 
     def _preflight(self):
         self._num_stmts = 0
@@ -397,7 +394,9 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _exec(self, body):
         for expression in body:
-            self._eval(expression)
+            retval = self._eval(expression)
+            if isinstance(retval, _Return) or retval is _break_sentinel or retval is _continue_sentinel:
+                return retval
 
     @property
     def names(self):
@@ -533,7 +532,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _assign_unpack(self, names, values):
         def do_assign(target, value):
             if not isinstance(target, (ast.Tuple, ast.List)):
-                self._assign(target, self._FinalValue(value=value))
+                self._assign(target, _FinalValue(value=value))
             else:
                 try:
                     value = list(iter(value))
@@ -551,14 +550,14 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== execution =====
     def _exec_return(self, node):
-        raise self._Return(self._eval(node.value))
+        return _Return(self._eval(node.value))
 
     def _exec_if(self, node):
         test = self._eval(node.test)
         if test:
-            self._exec(node.body)
+            return self._exec(node.body)
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
     def _exec_for(self, node):
         for item in self._eval(node.iter):
@@ -566,15 +565,16 @@ class DraconicInterpreter(SimpleInterpreter):
             if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in for block)', node)
 
-            self._assign(node.target, self._FinalValue(value=item))
-            try:
-                self._exec(node.body)
-            except self._Break:
+            self._assign(node.target, _FinalValue(value=item))
+            retval = self._exec(node.body)
+            if isinstance(retval, _Return):
+                return retval
+            elif retval is _break_sentinel:
                 break
-            except self._Continue:
+            elif retval is _continue_sentinel:
                 continue
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
     def _exec_while(self, node):
         while self._eval(node.test):
@@ -582,17 +582,18 @@ class DraconicInterpreter(SimpleInterpreter):
             if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in while block)', node)
 
-            try:
-                self._exec(node.body)
-            except self._Break:
+            retval = self._exec(node.body)
+            if isinstance(retval, _Return):
+                return retval
+            elif retval is _break_sentinel:
                 break
-            except self._Continue:
+            elif retval is _continue_sentinel:
                 continue
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
     def _exec_break(self, node):
-        raise self._Break
+        return _break_sentinel
 
     def _exec_continue(self, node):
-        raise self._Continue
+        return _continue_sentinel

@@ -85,7 +85,8 @@ def test_keywords(i, ex):
 
 
 def test_namedexpr_if(i, ex):
-    if sys.version_info < (3, 8, 0): return
+    if sys.version_info < (3, 8, 0):
+        return
 
     expr = """
     if (a := 'true'):
@@ -99,7 +100,8 @@ def test_namedexpr_if(i, ex):
 
 
 def test_namedexpr_for(i, ex):
-    if sys.version_info < (3, 8, 0): return
+    if sys.version_info < (3, 8, 0):
+        return
 
     expr = """
     for i in (l := [1, 2, 3]):
@@ -111,7 +113,8 @@ def test_namedexpr_for(i, ex):
 
 
 def test_namedexpr_while(i, ex):
-    if sys.version_info < (3, 8, 0): return
+    if sys.version_info < (3, 8, 0):
+        return
 
     expr = """
     i = 1
@@ -141,6 +144,7 @@ def test_infinite_loops(ex):
         ex(expr)
 
 
+# todo: test flow keywords in for loops and outside control flow
 def test_break(ex):
     expr = """
     while 1:
@@ -156,6 +160,18 @@ def test_break(ex):
         if i == 5:
             break
     return i
+    """
+    assert ex(expr) == 5
+
+
+def test_continue(ex):
+    expr = """
+    i = 0
+    while 1:
+        i += 1
+        if i < 5:
+            continue
+        return i
     """
     assert ex(expr) == 5
 
