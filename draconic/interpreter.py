@@ -269,11 +269,6 @@ class _Return:
         self.value = retval
 
 
-class _FinalValue:
-    def __init__(self, value):
-        self.value = value
-
-
 class DraconicInterpreter(SimpleInterpreter):
     """The Draconic interpreter. Capable of running Draconic code."""
 
@@ -298,14 +293,13 @@ class DraconicInterpreter(SimpleInterpreter):
                 # assignments:
                 ast.Assign: self._eval_assign,
                 ast.AugAssign: self._eval_augassign,
-                _FinalValue: lambda v: v.value,
                 # control:
                 ast.Return: self._exec_return,
                 ast.If: self._exec_if,
                 ast.For: self._exec_for,
                 ast.While: self._exec_while,
-                ast.Break: self._exec_break,
-                ast.Continue: self._exec_continue,
+                ast.Break: lambda node: _break_sentinel,
+                ast.Continue: lambda node: _continue_sentinel,
                 ast.Pass: lambda node: None
             }
         )
@@ -494,16 +488,23 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== assignments =====
     def _eval_assign(self, node):
+        value = self._eval(node.value)
         for target in node.targets:  # a = b = 1
-            self._assign(target, node.value)
+            self._assign(target, value)
 
     def _eval_augassign(self, node):
-        self._aug_assign(node.target, node.op, node.value)
+        target = node.target
+        # transform a += 1 to a = a + 1, then we can use assign and eval
+        new_value = ast.BinOp(left=target, op=node.op, right=node.value)
+        ast.copy_location(new_value, target)
+        self._assign(target, self._eval_binop(new_value))
 
     def _eval_namedexpr(self, node):
-        self._assign(node.target, node.value)
-        return self._eval_name(node.target)
+        value = self._eval(node.value)
+        self._assign(node.target, value)
+        return value
 
+    # ---- primary assign branch ----
     def _assign(self, names, values):
         try:
             handler = self.assign_nodes[type(names)]
@@ -511,42 +512,30 @@ class DraconicInterpreter(SimpleInterpreter):
             raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__), names)
         return handler(names, values)
 
-    def _aug_assign(self, target, oper, value):
-        # transform a += 1 to a = a + 1, then we can use assign and eval
-        new_value = ast.BinOp(left=target, op=oper, right=value)
-        ast.copy_location(new_value, target)
-        self._assign(target, new_value)
-
     def _assign_name(self, name, value):
         if name.id in self.builtins:
             raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).", name)
-        value = self._eval(value)
         self._names[name.id] = value
 
     def _assign_subscript(self, name, value):
         container = self._eval(name.value)
         key = self._eval(name.slice)
-        value = self._eval(value)
         container[key] = value  # no further evaluation needed, if container is in names it will update
 
     def _assign_unpack(self, names, values):
-        def do_assign(target, value):
-            if not isinstance(target, (ast.Tuple, ast.List)):
-                self._assign(target, _FinalValue(value=value))
-            else:
-                try:
-                    value = list(iter(value))
-                except TypeError:
-                    raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__), names)
-                if not len(target.elts) == len(value):
-                    raise DraconicValueError(
-                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)), names
-                    )
-                for t, v in zip(target.elts, value):
-                    do_assign(t, v)
-
-        values = self._eval(values)
-        do_assign(names, values)
+        if not isinstance(names, (ast.Tuple, ast.List)):
+            self._assign(names, values)
+        else:
+            try:
+                values = list(iter(values))
+            except TypeError:
+                raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(values).__name__), names)
+            if not len(names.elts) == len(values):
+                raise DraconicValueError(
+                    "Unequal unpack: {} names, {} values".format(len(names.elts), len(values)), names
+                )
+            for t, v in zip(names.elts, values):
+                self._assign_unpack(t, v)
 
     # ===== execution =====
     def _exec_return(self, node):
@@ -565,7 +554,7 @@ class DraconicInterpreter(SimpleInterpreter):
             if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in for block)', node)
 
-            self._assign(node.target, _FinalValue(value=item))
+            self._assign(node.target, item)
             retval = self._exec(node.body)
             if isinstance(retval, _Return):
                 return retval
@@ -591,9 +580,3 @@ class DraconicInterpreter(SimpleInterpreter):
                 continue
         else:
             return self._exec(node.orelse)
-
-    def _exec_break(self, node):
-        return _break_sentinel
-
-    def _exec_continue(self, node):
-        return _continue_sentinel
