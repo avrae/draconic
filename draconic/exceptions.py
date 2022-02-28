@@ -1,9 +1,13 @@
+import sys
+
 __all__ = (
     "DraconicException", "DraconicSyntaxError",
     "InvalidExpression", "NotDefined", "FeatureNotAvailable", "DraconicValueError",
     "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements", "AnnotatedException",
     "_PostponedRaise", "_raise_in_context"
 )
+
+PY_310 = sys.version_info >= (3, 10, 0)
 
 
 class DraconicException(Exception):
@@ -18,7 +22,13 @@ class DraconicSyntaxError(DraconicException):
         super().__init__(original.msg)
         self.lineno = original.lineno
         self.offset = original.offset
+        self.end_lineno = None
+        self.end_offset = None
         self.text = original.text
+
+        if PY_310:
+            self.end_lineno = original.end_lineno
+            self.end_offset = original.end_offset
 
 
 class InvalidExpression(DraconicException):

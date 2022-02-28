@@ -46,8 +46,8 @@ class SimpleInterpreter(OperatorMixin):
             ast.keyword: self._eval_keyword,  # foo(x=y), kwargs (not supported)
             # container[key]:
             ast.Subscript: self._eval_subscript,
-            ast.Index: self._eval_index,
-            ast.Slice: self._eval_slice,
+            ast.Index: self._eval_index,  # deprecated in py3.9 (bpo-34822)
+            ast.Slice: self._eval_slice,  # deprecated in py3.9 (bpo-34822)
             # container.key:
             ast.Attribute: self._eval_attribute,
         }

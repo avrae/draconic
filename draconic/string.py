@@ -4,7 +4,7 @@ import re
 from .exceptions import IterableTooLong, _raise_in_context
 
 __all__ = (
-    'FORMAT_SPEC_RE', 'PRINTF_TEMPLATE_RE', 'JoinProxy', 'TranslateTableProxy'
+    'check_format_spec', 'FORMAT_SPEC_RE', 'PRINTF_TEMPLATE_RE', 'JoinProxy', 'TranslateTableProxy'
 )
 
 # ==== format spec ====
