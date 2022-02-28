@@ -62,6 +62,7 @@ def test_ljust(e):
 
 def test_replace(e):
     assert e("'foo'.replace('o', 'a')") == 'faa'
+    assert e("'foo'.replace('o', 'a', 1)") == 'fao'
     assert e("'foo'.replace('z', 'a'*999)") == 'foo'
     assert e("'foo'.replace('f', 'a'*998)") == 'foo'.replace('f', 'a' * 998)
     with pytest.raises(IterableTooLong):

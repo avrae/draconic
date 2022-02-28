@@ -134,8 +134,8 @@ def test_infinite_loops(ex):
         ex(expr)
 
 
-# todo: test flow keywords in for loops and outside control flow
-def test_break(ex):
+# while
+def test_break_while(ex):
     expr = """
     while 1:
         break
@@ -154,7 +154,7 @@ def test_break(ex):
     assert ex(expr) == 5
 
 
-def test_continue(ex):
+def test_continue_while(ex):
     expr = """
     i = 0
     while 1:
@@ -166,7 +166,7 @@ def test_continue(ex):
     assert ex(expr) == 5
 
 
-def test_return(ex):
+def test_return_while(ex):
     expr = """
     while 1:
         return 1
@@ -181,3 +181,79 @@ def test_return(ex):
             return i
     """
     assert ex(expr) == 5
+
+
+# for
+def test_break_for(ex):
+    expr = """
+    for _ in range(500):
+        break
+    return 1
+    """
+    assert ex(expr) == 1
+
+    expr = """
+    i = 0
+    for _ in range(500):
+        i += 1
+        if i == 5:
+            break
+    return i
+    """
+    assert ex(expr) == 5
+
+
+def test_continue_for(ex):
+    expr = """
+    i = 0
+    for _ in range(500):
+        i += 1
+        if i < 5:
+            continue
+        return i
+    """
+    assert ex(expr) == 5
+
+
+def test_return_for(ex):
+    expr = """
+    for i in range(500):
+        return i
+    """
+    assert ex(expr) == 0
+
+    expr = """
+    i = 0
+    for _ in range(500):
+        i += 1
+        if i == 5:
+            return i
+    """
+    assert ex(expr) == 5
+
+
+# outside
+def test_break_outside(e, ex):
+    with pytest.raises(DraconicSyntaxError):
+        ex("break")
+
+    with pytest.raises(DraconicSyntaxError):
+        e("break")
+
+
+def test_continue_outside(e, ex):
+    with pytest.raises(DraconicSyntaxError):
+        ex("continue")
+
+    with pytest.raises(DraconicSyntaxError):
+        e("continue")
+
+
+def test_return_outside(e, ex):
+    expr = """
+    return 1
+    return 2
+    return 3
+    """
+    assert ex(expr) == 1
+    assert e("return 1") == 1

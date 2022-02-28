@@ -4,6 +4,7 @@ from draconic import DraconicInterpreter
 from draconic.exceptions import *
 from draconic.helpers import DraconicConfig
 from draconic.versions import PY_39
+from tests.utils import temp_limits
 
 
 @pytest.fixture()
@@ -27,6 +28,26 @@ def test_creating(i, e):
     # lists
     with pytest.raises(FeatureNotAvailable):  # we don't allow this
         e(f"[*long, *long]")
+
+
+def test_f_string(i, e):
+    really_long_str = 'foo' * 1000
+    not_quite_as_long = 'f' * 999
+    i._names['long'] = really_long_str
+    i._names['lesslong'] = not_quite_as_long
+
+    assert e("lesslong") == not_quite_as_long
+    assert e("f'{lesslong}'") == not_quite_as_long
+    assert e("f'{lesslong}a'") == not_quite_as_long + 'a'
+
+    with pytest.raises(IterableTooLong):
+        e("f'{long}'")
+
+    with pytest.raises(IterableTooLong):
+        e("f'{lesslong}{lesslong}'")
+
+    with pytest.raises(IterableTooLong):
+        e("f'{lesslong}aaaaaa'")
 
 
 def test_list(i, e):
@@ -318,12 +339,38 @@ def test_int_limits_not_floats(e):
 
 
 @pytest.mark.timeout(3)  # list mult should be fast, even if we do it a lot
-def test_list_mult_speed():
-    config = DraconicConfig(max_loops=10000, max_const_len=10000)
-    i = DraconicInterpreter(config=config)
+def test_list_mult_speed(i):
     expr = """
     while True:
         a = [0] * 10000
     """.strip()
-    with pytest.raises(TooManyStatements):
-        i.execute(expr)
+    with temp_limits(i, max_loops=10000, max_const_len=10000):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
+
+
+def test_loop_limit(i):
+    expr = """
+    while True:
+        pass
+    """.strip()
+
+    expr2 = """
+    for _ in [0] * 101:
+        pass
+    """.strip()
+    with temp_limits(i, max_loops=100):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
+
+        with pytest.raises(TooManyStatements):
+            i.execute(expr2)
+
+
+def test_stmt_limit(i):
+    expr = """
+    a = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1
+    """.strip()
+    with temp_limits(i, max_statements=10):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
