@@ -4,6 +4,7 @@ from collections import UserList, UserString
 
 from .exceptions import *
 from .string import JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
+from .versions import PY_39
 
 __all__ = (
     'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
@@ -98,6 +99,32 @@ def safe_set(config):
             super().__init__(*args, **kwargs)
             self.__approx_len__ = approx_len_of(self)
 
+        def union(self, *s):
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().union(*s))
+
+        def __or__(self, other):
+            return self.union(other)
+
+        def intersection(self, *s):
+            if any(approx_len_of(other) > config.max_const_len for other in s):
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().intersection(*s))
+
+        def __and__(self, other):
+            return self.intersection(other)
+
+        def symmetric_difference(self, *s):
+            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            return SafeSet(super().symmetric_difference(*s))
+
+        def __xor__(self, other):
+            return self.symmetric_difference(other)
+
+        # difference not reimplemented as it cannot grow the set and has no cheap approximation for len
+
         def update(self, *s):
             other_lens = sum(approx_len_of(other) for other in s)
             if approx_len_of(self) + other_lens > config.max_const_len:
@@ -105,16 +132,26 @@ def safe_set(config):
             super().update(*s)
             self.__approx_len__ += other_lens
 
+        def intersection_update(self, *s):
+            if any(approx_len_of(other) > config.max_const_len for other in s):
+                _raise_in_context(IterableTooLong, "This set is too large")
+            super().intersection_update(*s)
+            self.__approx_len__ = min(self.__approx_len__, *(approx_len_of(other) for other in s))
+
+        def symmetric_difference_update(self, s):
+            total_approx = approx_len_of(self) + approx_len_of(s)
+            if total_approx > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This set is too large")
+            super().symmetric_difference(s)
+            self.__approx_len__ = total_approx
+
+        # difference_update not reimplemented as it cannot grow the set and has no cheap approximation for len
+
         def add(self, element):
             if approx_len_of(self) + 1 > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().add(element)
             self.__approx_len__ += 1
-
-        def union(self, *s):
-            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This set is too large")
-            return SafeSet(super().union(*s))
 
         def pop(self):
             retval = super().pop()
@@ -171,6 +208,13 @@ def safe_dict(config):
         def __delitem__(self, key):
             super().__delitem__(key)
             self.__approx_len__ -= 1
+
+        if PY_39:
+            def __or__(self, other):
+                if approx_len_of(self) + approx_len_of(other) > config.max_const_len:
+                    _raise_in_context(IterableTooLong, "This dict is too large")
+
+                return SafeDict(super().__or__(other))
 
     return SafeDict
 

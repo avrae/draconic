@@ -1,4 +1,4 @@
-import sys
+from .versions import PY_310
 
 __all__ = (
     "DraconicException", "DraconicSyntaxError",
@@ -6,8 +6,6 @@ __all__ = (
     "LimitException", "NumberTooHigh", "IterableTooLong", "TooManyStatements", "AnnotatedException",
     "_PostponedRaise", "_raise_in_context"
 )
-
-PY_310 = sys.version_info >= (3, 10, 0)
 
 
 class DraconicException(Exception):

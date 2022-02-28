@@ -3,6 +3,7 @@ import pytest
 from draconic import DraconicInterpreter
 from draconic.exceptions import *
 from draconic.helpers import DraconicConfig
+from draconic.versions import PY_39
 
 
 @pytest.fixture()
@@ -53,6 +54,7 @@ def test_set(i, e):
     i.builtins['range'] = range
     e("long = set(range(1000))")
     e("long2 = set(range(1000, 2000))")
+    e("longer = set(range(1001))")
 
     with pytest.raises(IterableTooLong):
         e("long.add(1000)")
@@ -61,17 +63,46 @@ def test_set(i, e):
         e("long.update(long2)")
 
     with pytest.raises(IterableTooLong):
+        e("long.update({1000})")
+
+    with pytest.raises(IterableTooLong):
         e("long.union(long2)")
 
     with pytest.raises(IterableTooLong):
-        e("long.update({1000})")
+        e("long | long2")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.intersection(longer)")
+
+    with pytest.raises(IterableTooLong):
+        e("longer & longer")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference(long2)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^ long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long |= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("longer &= longer")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.intersection_update(longer)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference_update(long2)")
 
     # we should always be operating using safe sets
     i.builtins['realset'] = {1, 2, 3}
     e("my_set = {3, 4, 5}")
-    # these operations don't work because sets use bitwise ops and we don't allow those
-    # assert isinstance(e("my_set | realset"), i._set)
-    # assert isinstance(e("realset | my_set"), i._set)
+    assert isinstance(e("my_set | realset"), i._set)
+    assert isinstance(e("realset | my_set"), i._set)
     e("my_set.update(realset)")
     assert isinstance(e("my_set"), i._set)
     assert isinstance(e("my_set.union(realset)"), i._set)
@@ -81,12 +112,20 @@ def test_dict(i, e):
     i.builtins['range'] = range
     e("long = dict((i, i) for i in range(1000))")
     e("long2 = {i: i for i in range(1000, 2000)}")
+    e("long_copy = long.copy()")
 
     with pytest.raises(IterableTooLong):
         e("long.update(long2)")
 
     with pytest.raises(IterableTooLong):
         e("long.update({'foo': 'bar'})")
+
+    if PY_39:
+        with pytest.raises(IterableTooLong):
+            e("long | {'foo': 'bar'}")
+
+        with pytest.raises(IterableTooLong):
+            e("long_copy |= long2")
 
 
 def test_that_it_still_works_right(i, e):
