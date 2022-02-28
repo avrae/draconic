@@ -265,6 +265,8 @@ _continue_sentinel = object()
 
 
 class _Return:
+    __slots__ = ("value",)
+
     def __init__(self, retval):
         self.value = retval
 
