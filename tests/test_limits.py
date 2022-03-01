@@ -141,6 +141,9 @@ def test_dict(i, e):
     with pytest.raises(IterableTooLong):
         e("long.update({'foo': 'bar'})")
 
+    with pytest.raises(IterableTooLong):
+        e("long['foo'] = 'bar'")
+
     if PY_39:
         with pytest.raises(IterableTooLong):
             e("long | {'foo': 'bar'}")

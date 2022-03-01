@@ -142,7 +142,7 @@ def safe_set(config):
             total_approx = approx_len_of(self) + approx_len_of(s)
             if total_approx > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
-            super().symmetric_difference(s)
+            super().symmetric_difference_update(s)
             self.__approx_len__ = total_approx
 
         # difference_update not reimplemented as it cannot grow the set and has no cheap approximation for len
@@ -162,9 +162,7 @@ def safe_set(config):
             super().remove(element)
             self.__approx_len__ -= 1
 
-        def discard(self, element):
-            super().discard(element)
-            self.__approx_len__ -= 1
+        # discard not reimplemented as the discarded element may not be a member
 
         def clear(self):
             super().clear()
