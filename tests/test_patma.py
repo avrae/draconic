@@ -1,6 +1,9 @@
 import pytest
 
 from draconic import DraconicValueError
+from draconic.versions import PY_310
+
+pytestmark = pytest.mark.skipif(not PY_310, reason="requires python 3.10")
 
 
 def test_bindings(i, ex):
