@@ -1,10 +1,11 @@
 import ast
 import operator as op
+from typing import Sequence
 
 from .exceptions import *
 from .types import *
 
-__all__ = ("DraconicConfig", "OperatorMixin")
+__all__ = ("DraconicConfig", "OperatorMixin", "zip_star")
 
 # ===== config =====
 DISALLOW_PREFIXES = ['_', 'func_']
@@ -188,3 +189,28 @@ class OperatorMixin:
             _raise_in_context(NumberTooHigh, "This number is too large")
         if isinstance(b, int) and (b < self._config.min_int or b > self._config.max_int):
             _raise_in_context(NumberTooHigh, "This number is too large")
+
+
+# ==== other utils ====
+def zip_star(a: Sequence, b: Sequence, star_index: int):
+    """
+    Like zip(a, b), but zips the element at ``a[star_index]`` with a list of 0..len(b) elements such that every other
+    element of ``a`` maps to exactly one element of ``b``.
+
+    >>> zip_star(['a', 'b', 'c'], [1, 2, 3, 4], star_index=1)  # like a, *b, c = [1, 2, 3, 4]
+    [('a', 1), ('b', [2, 3]), ('c', 4)]
+    >>> zip_star(['a', 'b', 'c'], [1, 2], star_index=1)  # like a, *b, c = [1, 2]
+    [('a', 1), ('b', []), ('c', 2)]
+
+    Requires ``len(b) >= len(a) - 1`` and ``star_index < len(a)``.
+    """
+    if not 0 <= star_index < len(a):
+        raise IndexError("'star_index' must be a valid index of 'a'")
+    if not len(b) >= len(a) - 1:
+        raise ValueError("'b' must be no more than 1 shorter than 'a'")
+
+    length_difference = len(b) - (len(a) - 1)
+
+    yield from zip(a[:star_index], b[:star_index])
+    yield a[star_index], b[star_index:star_index + length_difference]
+    yield from zip(a[star_index + 1:], b[star_index + length_difference:])

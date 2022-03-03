@@ -1,8 +1,10 @@
 import ast
+from collections.abc import Mapping, Sequence
 
 from .exceptions import *
-from .helpers import DraconicConfig, OperatorMixin
+from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
+from .versions import PY_310
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -315,6 +317,29 @@ class DraconicInterpreter(SimpleInterpreter):
             # no assigning to attributes
         }
 
+        self.patma_nodes = {}
+
+        if PY_310:
+            self.nodes.update(
+                {
+                    ast.Match: self._exec_match,
+                }
+            )
+
+            self.patma_nodes.update(
+                {
+                    ast.MatchValue: self._patma_match_value,
+                    ast.MatchSingleton: self._patma_match_singleton,
+                    ast.MatchSequence: self._patma_match_sequence,
+                    ast.MatchMapping: self._patma_match_mapping,
+                    ast.MatchStar: self._patma_match_star,
+                    # no MatchClass
+
+                    ast.MatchAs: self._patma_match_as,
+                    ast.MatchOr: self._patma_match_or
+                }
+            )
+
         # compound type helpers
         self._list = self._config.list
         self._set = self._config.set
@@ -576,3 +601,152 @@ class DraconicInterpreter(SimpleInterpreter):
                 continue
         else:
             return self._exec(node.orelse)
+
+    # ===== patma =====
+    # impl inspired by GVR's impl at https://github.com/gvanrossum/patma/blob/master/patma.py
+    # note: we do duplicate binding checks at runtime instead of preflight, which means that
+    # some code could run before the duplicate binding is detected, and certain exprs illegal in Python are legal here
+    # this is OK for our use case but differs from Python's impl
+    def _exec_match(self, node):
+        subject = self._eval(node.subject)
+        for match_case in node.cases:
+            if (bindings := self._patma(match_case.pattern, subject)) is not None:
+                self._names.update(bindings)  # In python patma, values are bound before the guard executes
+                if match_case.guard is not None and not self._eval(match_case.guard):
+                    continue
+                return self._exec(match_case.body)
+
+    def _patma(self, pattern, subject):
+        """
+        Execute matching logic for a given match_case and subject.
+        If the subject matches the case, return the dict of bindings for this case.
+        Otherwise, return None.
+        """
+        try:
+            handler = self.patma_nodes[type(pattern)]
+        except KeyError:
+            raise FeatureNotAvailable(f"Matching on {type(pattern).__name__} is not allowed", pattern)
+        self._num_stmts += 1
+        return handler(pattern, subject)
+
+    def _patma_match_value(self, node, subject):
+        if subject == self._eval(node.value):
+            return {}
+        return None
+
+    def _patma_match_singleton(self, node, subject):
+        if subject is self._eval(node.value):
+            return {}
+        return None
+
+    def _patma_match_sequence(self, node, subject):
+        if not isinstance(subject, Sequence) or isinstance(subject, (str, bytes)):
+            return None
+
+        match_star_idxs = [
+            idx
+            for idx, pattern in enumerate(node.patterns)
+            if isinstance(pattern, ast.MatchStar)
+        ]
+        if len(match_star_idxs) > 1:
+            # multiple starred names
+            raise DraconicValueError(
+                f"multiple starred names in sequence pattern",
+                node
+            )
+        elif match_star_idxs:
+            # one starred name
+            if not len(node.patterns) <= len(subject) + 1:
+                return None
+            pattern_iterator = zip_star(node.patterns, subject, star_index=match_star_idxs[0])
+        else:
+            # no starred names
+            if len(node.patterns) != len(subject):
+                return None
+            pattern_iterator = zip(node.patterns, subject)
+
+        # do iteration over patterns and values
+        bindings = {}
+        bound_names = set()
+        for pattern, item in pattern_iterator:
+            # recursive check
+            # noinspection DuplicatedCode
+            match = self._patma(pattern, item)
+            if match is None:
+                return None
+
+            # duplicate bindings check
+            if bound_names.intersection(match):
+                raise DraconicValueError(
+                    f"multiple assignment to names {sorted(bound_names.intersection(match))} in sequence pattern",
+                    node
+                )
+            bindings.update(match)
+            bound_names.update(match)
+
+        return bindings
+
+    def _patma_match_mapping(self, node, subject):
+        if not isinstance(subject, Mapping):
+            return None
+
+        bindings = {}
+        bound_names = set()
+        bound_keys = set()
+        for key, pattern in zip(node.keys, node.patterns):
+            # recursive check
+            key = self._eval(key)
+            try:
+                value = subject[key]
+            except KeyError:
+                return None
+            # noinspection DuplicatedCode
+            match = self._patma(pattern, value)
+            if match is None:
+                return None
+
+            # duplicate bindings check
+            if bound_names.intersection(match):
+                raise DraconicValueError(
+                    f"multiple assignment to names {sorted(bound_names.intersection(match))} in mapping pattern",
+                    node
+                )
+            bindings.update(match)
+            bound_names.update(match)
+            bound_keys.add(key)
+
+        if node.rest is not None:
+            if node.rest in bound_names:
+                raise DraconicValueError(
+                    f"multiple assignment to name {node.rest!r} in mapping pattern",
+                    node
+                )
+            bindings[node.rest] = {k: v for k, v in subject.items() if k not in bound_keys}
+
+        return bindings
+
+    @staticmethod
+    def _patma_match_star(node, subject):
+        if node.name is None:
+            return {}
+        return {node.name: subject}
+
+    def _patma_match_as(self, node, subject):
+        if node.name is None:  # this is the wildcard pattern, always matches
+            return {}
+        if node.pattern is None:  # bare name capture pattern, always matches
+            return {node.name: subject}
+        # otherwise if the inner match matches, we just add an additional binding to it
+        inner_match = self._patma(node.pattern, subject)
+        if inner_match is None:
+            return None
+        return {**inner_match, node.name: subject}
+
+    def _patma_match_or(self, node, subject):
+        # since we don't know the subpattern's bindings until it executes, we can't enforce both sides having the
+        # same bindings like in Python
+        for pattern in node.patterns:
+            match = self._patma(pattern, subject)
+            if match is not None:
+                return match
+        return None
