@@ -634,8 +634,9 @@ class DraconicInterpreter(SimpleInterpreter):
             return {}
         return None
 
-    def _patma_match_singleton(self, node, subject):
-        if subject is self._eval(node.value):
+    @staticmethod
+    def _patma_match_singleton(node, subject):
+        if subject is node.value:
             return {}
         return None
 
