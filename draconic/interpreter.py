@@ -1,8 +1,10 @@
 import ast
+from collections.abc import Mapping, Sequence
 
 from .exceptions import *
-from .helpers import DraconicConfig, OperatorMixin
+from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
+from .versions import PY_310
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -46,8 +48,8 @@ class SimpleInterpreter(OperatorMixin):
             ast.keyword: self._eval_keyword,  # foo(x=y), kwargs (not supported)
             # container[key]:
             ast.Subscript: self._eval_subscript,
-            ast.Index: self._eval_index,
-            ast.Slice: self._eval_slice,
+            ast.Index: self._eval_index,  # deprecated in py3.9 (bpo-34822)
+            ast.Slice: self._eval_slice,  # deprecated in py3.9 (bpo-34822)
             # container.key:
             ast.Attribute: self._eval_attribute,
         }
@@ -88,8 +90,10 @@ class SimpleInterpreter(OperatorMixin):
         try:
             handler = self.nodes[type(node)]
         except KeyError:
-            raise FeatureNotAvailable("Sorry, {0} is not available in this "
-                                      "evaluator".format(type(node).__name__), node)
+            raise FeatureNotAvailable(
+                "Sorry, {0} is not available in this "
+                "evaluator".format(type(node).__name__), node
+            )
 
         try:
             return handler(node)
@@ -123,13 +127,15 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_str(self, node):
         if len(node.s) > self._config.max_const_len:
             raise IterableTooLong(
-                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node)
+                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node
+            )
         return self._str(node.s)
 
     def _eval_constant(self, node):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
-                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node)
+                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node
+            )
         if isinstance(node.value, bytes):
             raise FeatureNotAvailable("Creation of bytes literals is not allowed", node)
         return node.value
@@ -138,8 +144,10 @@ class SimpleInterpreter(OperatorMixin):
         return self.operators[type(node.op)](self._eval(node.operand))
 
     def _eval_binop(self, node):
-        return self.operators[type(node.op)](self._eval(node.left),
-                                             self._eval(node.right))
+        return self.operators[type(node.op)](
+            self._eval(node.left),
+            self._eval(node.right)
+        )
 
     def _eval_boolop(self, node):
         vout = False
@@ -238,8 +246,10 @@ class SimpleInterpreter(OperatorMixin):
             val = str(self._eval(n))
             length += len(val)
             if length > self._config.max_const_len:
-                raise IterableTooLong(f"f-string in statement is too long ({length} > {self._config.max_const_len})",
-                                      node)
+                raise IterableTooLong(
+                    f"f-string in statement is too long ({length} > {self._config.max_const_len})",
+                    node
+                )
             evaluated_values.append(val)
         return ''.join(evaluated_values)
 
@@ -252,60 +262,52 @@ class SimpleInterpreter(OperatorMixin):
 
 
 # ===== multiple-line execution, assignment, compound types =====
+_break_sentinel = object()
+_continue_sentinel = object()
+
+
+class _Return:
+    __slots__ = ("value",)
+
+    def __init__(self, retval):
+        self.value = retval
+
+
 class DraconicInterpreter(SimpleInterpreter):
     """The Draconic interpreter. Capable of running Draconic code."""
 
-    class _FinalValue:
-        def __init__(self, value):
-            self.value = value
-
-    class _Return(BaseException):
-        """We propogate a ``return`` up by using a custom exception."""
-
-        def __init__(self, retval):
-            self.value = retval
-
-    class _Break(BaseException):
-        pass
-
-    class _Continue(BaseException):
-        pass
-
     def __init__(self, builtins=None, config=None, initial_names=None):
-        super(DraconicInterpreter, self).__init__(builtins, config)
+        super().__init__(builtins, config)
 
         if initial_names is None:
             initial_names = {}
 
-        self.nodes.update({
-            # compound types:
-            ast.Dict: self._eval_dict,
-            ast.Tuple: self._eval_tuple,
-            ast.List: self._eval_list,
-            ast.Set: self._eval_set,
-            # comprehensions:
-            ast.ListComp: self._eval_listcomp,
-            ast.SetComp: self._eval_setcomp,
-            ast.DictComp: self._eval_dictcomp,
-            ast.GeneratorExp: self._eval_generatorexp,
-            # assignments:
-            ast.Assign: self._eval_assign,
-            ast.AugAssign: self._eval_augassign,
-            self._FinalValue: lambda v: v.value,
-            # control:
-            ast.Return: self._exec_return,
-            ast.If: self._exec_if,
-            ast.For: self._exec_for,
-            ast.While: self._exec_while,
-            ast.Break: self._exec_break,
-            ast.Continue: self._exec_continue,
-            ast.Pass: lambda node: None
-        })
-
-        if hasattr(ast, 'NamedExpr'):
-            self.nodes.update({
-                ast.NamedExpr: self._eval_namedexpr
-            })
+        self.nodes.update(
+            {
+                # compound types:
+                ast.Dict: self._eval_dict,
+                ast.Tuple: self._eval_tuple,
+                ast.List: self._eval_list,
+                ast.Set: self._eval_set,
+                # comprehensions:
+                ast.ListComp: self._eval_listcomp,
+                ast.SetComp: self._eval_setcomp,
+                ast.DictComp: self._eval_dictcomp,
+                ast.GeneratorExp: self._eval_generatorexp,
+                # assignments:
+                ast.Assign: self._eval_assign,
+                ast.AugAssign: self._eval_augassign,
+                ast.NamedExpr: self._eval_namedexpr,
+                # control:
+                ast.Return: self._exec_return,
+                ast.If: self._exec_if,
+                ast.For: self._exec_for,
+                ast.While: self._exec_while,
+                ast.Break: lambda node: _break_sentinel,
+                ast.Continue: lambda node: _continue_sentinel,
+                ast.Pass: lambda node: None
+            }
+        )
 
         self.assign_nodes = {
             ast.Name: self._assign_name,
@@ -314,6 +316,29 @@ class DraconicInterpreter(SimpleInterpreter):
             ast.Subscript: self._assign_subscript,
             # no assigning to attributes
         }
+
+        self.patma_nodes = {}
+
+        if PY_310:
+            self.nodes.update(
+                {
+                    ast.Match: self._exec_match,
+                }
+            )
+
+            self.patma_nodes.update(
+                {
+                    ast.MatchValue: self._patma_match_value,
+                    ast.MatchSingleton: self._patma_match_singleton,
+                    ast.MatchSequence: self._patma_match_sequence,
+                    ast.MatchMapping: self._patma_match_mapping,
+                    ast.MatchStar: self._patma_match_star,
+                    # no MatchClass
+
+                    ast.MatchAs: self._patma_match_as,
+                    ast.MatchOr: self._patma_match_or
+                }
+            )
 
         # compound type helpers
         self._list = self._config.list
@@ -325,13 +350,17 @@ class DraconicInterpreter(SimpleInterpreter):
         self._names = initial_names
 
     def eval(self, expr):
-        try:
-            return super().eval(expr)
-        except self._Return as r:
-            return r.value
-        except (self._Break, self._Continue):
-            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
-                                                  ("<string>", 1, 1, expr)))
+        retval = super().eval(expr)
+        if isinstance(retval, _Return):
+            return retval.value
+        elif retval is _break_sentinel or retval is _continue_sentinel:
+            raise DraconicSyntaxError(
+                SyntaxError(
+                    "Loop control outside loop",
+                    ("<string>", 1, 1, expr)
+                )
+            )
+        return retval
 
     def execute(self, expr):
         """
@@ -343,13 +372,16 @@ class DraconicInterpreter(SimpleInterpreter):
             expr = self.parse(expr)
 
         self._preflight()
-        try:
-            self._exec(expr)
-        except self._Return as r:
-            return r.value
-        except (self._Break, self._Continue):
-            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
-                                                  ("<string>", 1, 1, expr)))
+        retval = self._exec(expr)
+        if retval is _break_sentinel or retval is _continue_sentinel:
+            raise DraconicSyntaxError(
+                SyntaxError(
+                    "Loop control outside loop",
+                    ("<string>", 1, 1, expr)
+                )
+            )
+        if isinstance(retval, _Return):
+            return retval.value
 
     def _preflight(self):
         self._num_stmts = 0
@@ -377,7 +409,9 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _exec(self, body):
         for expression in body:
-            self._eval(expression)
+            retval = self._eval(expression)
+            if isinstance(retval, _Return) or retval is _break_sentinel or retval is _continue_sentinel:
+                return retval
 
     @property
     def names(self):
@@ -475,16 +509,23 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== assignments =====
     def _eval_assign(self, node):
+        value = self._eval(node.value)
         for target in node.targets:  # a = b = 1
-            self._assign(target, node.value)
+            self._assign(target, value)
 
     def _eval_augassign(self, node):
-        self._aug_assign(node.target, node.op, node.value)
+        target = node.target
+        # transform a += 1 to a = a + 1, then we can use assign and eval
+        new_value = ast.BinOp(left=target, op=node.op, right=node.value)
+        ast.copy_location(new_value, target)
+        self._assign(target, self._eval_binop(new_value))
 
     def _eval_namedexpr(self, node):
-        self._assign(node.target, node.value)
-        return self._eval_name(node.target)
+        value = self._eval(node.value)
+        self._assign(node.target, value)
+        return value
 
+    # ---- primary assign branch ----
     def _assign(self, names, values):
         try:
             handler = self.assign_nodes[type(names)]
@@ -492,52 +533,41 @@ class DraconicInterpreter(SimpleInterpreter):
             raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__), names)
         return handler(names, values)
 
-    def _aug_assign(self, target, oper, value):
-        # transform a += 1 to a = a + 1, then we can use assign and eval
-        new_value = ast.BinOp(left=target, op=oper, right=value)
-        ast.copy_location(new_value, target)
-        self._assign(target, new_value)
-
     def _assign_name(self, name, value):
         if name.id in self.builtins:
             raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).", name)
-        value = self._eval(value)
         self._names[name.id] = value
 
     def _assign_subscript(self, name, value):
         container = self._eval(name.value)
         key = self._eval(name.slice)
-        value = self._eval(value)
         container[key] = value  # no further evaluation needed, if container is in names it will update
 
     def _assign_unpack(self, names, values):
-        def do_assign(target, value):
-            if not isinstance(target, (ast.Tuple, ast.List)):
-                self._assign(target, self._FinalValue(value=value))
-            else:
-                try:
-                    value = list(iter(value))
-                except TypeError:
-                    raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(value).__name__), names)
-                if not len(target.elts) == len(value):
-                    raise DraconicValueError(
-                        "Unequal unpack: {} names, {} values".format(len(target.elts), len(value)), names)
-                for t, v in zip(target.elts, value):
-                    do_assign(t, v)
-
-        values = self._eval(values)
-        do_assign(names, values)
+        if not isinstance(names, (ast.Tuple, ast.List)):
+            self._assign(names, values)
+        else:
+            try:
+                values = list(iter(values))
+            except TypeError:
+                raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(values).__name__), names)
+            if not len(names.elts) == len(values):
+                raise DraconicValueError(
+                    "Unequal unpack: {} names, {} values".format(len(names.elts), len(values)), names
+                )
+            for t, v in zip(names.elts, values):
+                self._assign_unpack(t, v)
 
     # ===== execution =====
     def _exec_return(self, node):
-        raise self._Return(self._eval(node.value))
+        return _Return(self._eval(node.value))
 
     def _exec_if(self, node):
         test = self._eval(node.test)
         if test:
-            self._exec(node.body)
+            return self._exec(node.body)
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
     def _exec_for(self, node):
         for item in self._eval(node.iter):
@@ -545,15 +575,16 @@ class DraconicInterpreter(SimpleInterpreter):
             if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in for block)', node)
 
-            self._assign(node.target, self._FinalValue(value=item))
-            try:
-                self._exec(node.body)
-            except self._Break:
+            self._assign(node.target, item)
+            retval = self._exec(node.body)
+            if isinstance(retval, _Return):
+                return retval
+            elif retval is _break_sentinel:
                 break
-            except self._Continue:
+            elif retval is _continue_sentinel:
                 continue
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
     def _exec_while(self, node):
         while self._eval(node.test):
@@ -561,17 +592,162 @@ class DraconicInterpreter(SimpleInterpreter):
             if self._loops > self._config.max_loops:
                 raise TooManyStatements('Too many loops (in while block)', node)
 
-            try:
-                self._exec(node.body)
-            except self._Break:
+            retval = self._exec(node.body)
+            if isinstance(retval, _Return):
+                return retval
+            elif retval is _break_sentinel:
                 break
-            except self._Continue:
+            elif retval is _continue_sentinel:
                 continue
         else:
-            self._exec(node.orelse)
+            return self._exec(node.orelse)
 
-    def _exec_break(self, node):
-        raise self._Break
+    # ===== patma =====
+    # impl inspired by GVR's impl at https://github.com/gvanrossum/patma/blob/master/patma.py
+    # note: we do duplicate binding checks at runtime instead of preflight, which means that
+    # some code could run before the duplicate binding is detected, and certain exprs illegal in Python are legal here
+    # this is OK for our use case but differs from Python's impl
+    def _exec_match(self, node):
+        subject = self._eval(node.subject)
+        for match_case in node.cases:
+            if (bindings := self._patma(match_case.pattern, subject)) is not None:
+                self._names.update(bindings)  # In python patma, values are bound before the guard executes
+                if match_case.guard is not None and not self._eval(match_case.guard):
+                    continue
+                return self._exec(match_case.body)
 
-    def _exec_continue(self, node):
-        raise self._Continue
+    def _patma(self, pattern, subject):
+        """
+        Execute matching logic for a given match_case and subject.
+        If the subject matches the case, return the dict of bindings for this case.
+        Otherwise, return None.
+        """
+        try:
+            handler = self.patma_nodes[type(pattern)]
+        except KeyError:
+            raise FeatureNotAvailable(f"Matching on {type(pattern).__name__} is not allowed", pattern)
+        self._num_stmts += 1
+        return handler(pattern, subject)
+
+    def _patma_match_value(self, node, subject):
+        if subject == self._eval(node.value):
+            return {}
+        return None
+
+    @staticmethod
+    def _patma_match_singleton(node, subject):
+        if subject is node.value:
+            return {}
+        return None
+
+    def _patma_match_sequence(self, node, subject):
+        if not isinstance(subject, Sequence) or isinstance(subject, (str, bytes)):
+            return None
+
+        match_star_idxs = [
+            idx
+            for idx, pattern in enumerate(node.patterns)
+            if isinstance(pattern, ast.MatchStar)
+        ]
+        if len(match_star_idxs) > 1:
+            # multiple starred names
+            raise DraconicValueError(
+                f"multiple starred names in sequence pattern",
+                node
+            )
+        elif match_star_idxs:
+            # one starred name
+            if not len(node.patterns) <= len(subject) + 1:
+                return None
+            pattern_iterator = zip_star(node.patterns, subject, star_index=match_star_idxs[0])
+        else:
+            # no starred names
+            if len(node.patterns) != len(subject):
+                return None
+            pattern_iterator = zip(node.patterns, subject)
+
+        # do iteration over patterns and values
+        bindings = {}
+        bound_names = set()
+        for pattern, item in pattern_iterator:
+            # recursive check
+            # noinspection DuplicatedCode
+            match = self._patma(pattern, item)
+            if match is None:
+                return None
+
+            # duplicate bindings check
+            if bound_names.intersection(match):
+                raise DraconicValueError(
+                    f"multiple assignment to names {sorted(bound_names.intersection(match))} in sequence pattern",
+                    node
+                )
+            bindings.update(match)
+            bound_names.update(match)
+
+        return bindings
+
+    def _patma_match_mapping(self, node, subject):
+        if not isinstance(subject, Mapping):
+            return None
+
+        bindings = {}
+        bound_names = set()
+        bound_keys = set()
+        for key, pattern in zip(node.keys, node.patterns):
+            # recursive check
+            key = self._eval(key)
+            try:
+                value = subject[key]
+            except KeyError:
+                return None
+            # noinspection DuplicatedCode
+            match = self._patma(pattern, value)
+            if match is None:
+                return None
+
+            # duplicate bindings check
+            if bound_names.intersection(match):
+                raise DraconicValueError(
+                    f"multiple assignment to names {sorted(bound_names.intersection(match))} in mapping pattern",
+                    node
+                )
+            bindings.update(match)
+            bound_names.update(match)
+            bound_keys.add(key)
+
+        if node.rest is not None:
+            if node.rest in bound_names:
+                raise DraconicValueError(
+                    f"multiple assignment to name {node.rest!r} in mapping pattern",
+                    node
+                )
+            bindings[node.rest] = {k: v for k, v in subject.items() if k not in bound_keys}
+
+        return bindings
+
+    @staticmethod
+    def _patma_match_star(node, subject):
+        if node.name is None:
+            return {}
+        return {node.name: subject}
+
+    def _patma_match_as(self, node, subject):
+        if node.name is None:  # this is the wildcard pattern, always matches
+            return {}
+        if node.pattern is None:  # bare name capture pattern, always matches
+            return {node.name: subject}
+        # otherwise if the inner match matches, we just add an additional binding to it
+        inner_match = self._patma(node.pattern, subject)
+        if inner_match is None:
+            return None
+        return {**inner_match, node.name: subject}
+
+    def _patma_match_or(self, node, subject):
+        # since we don't know the subpattern's bindings until it executes, we can't enforce both sides having the
+        # same bindings like in Python
+        for pattern in node.patterns:
+            match = self._patma(pattern, subject)
+            if match is not None:
+                return match
+        return None

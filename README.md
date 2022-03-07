@@ -1,2 +1,5 @@
 # draconic
- The Draconic scripting language.
+
+The Draconic scripting language.
+
+Requires Python 3.8+
