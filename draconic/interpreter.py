@@ -806,7 +806,7 @@ class DraconicInterpreter(SimpleInterpreter):
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
-            raise TooMuchRecursion('Maximum recursion depth exeeeded', __calling_node)
+            raise TooMuchRecursion('Maximum recursion depth exceeded', __calling_node)
         # bind closure names
         self._names = __functiondef._outer_scope_names.copy()
         # check and bind args
