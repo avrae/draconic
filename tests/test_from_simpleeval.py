@@ -245,7 +245,7 @@ class TestTryingToBreakOut(DRYTest):
         """ exponent operations can take a long time. """
         old_max = self.s._config.max_power_base
 
-        self.t("9**9**3", 9 ** 9 ** 3)
+        self.t("9**9", 9 ** 9)
 
         with self.assertRaises(NumberTooHigh):
             self.t("9**9**8", 0)
@@ -264,8 +264,8 @@ class TestTryingToBreakOut(DRYTest):
     def test_encode_bignums(self):
         # thanks gk
         if hasattr(1, 'from_bytes'):  # python3 only
-            with self.assertRaises(IterableTooLong):
-                self.t('(1).from_bytes(("123123123123123123123123").encode()*999999, "big")', 0)
+            with self.assertRaises(FeatureNotAvailable):
+                self.t('(1).from_bytes(b"123123123123123123123123"*999999, "big")', 0)
 
     def test_string_length(self):
         with self.assertRaises(IterableTooLong):
@@ -301,10 +301,7 @@ class TestTryingToBreakOut(DRYTest):
                 self.t("f'{\"foo\"*50000}'", 0)
 
     def test_bytes_array_test(self):
-        self.t("'20000000000000000000'.encode() * 5000",
-               '20000000000000000000'.encode() * 5000)
-
-        with self.assertRaises(IterableTooLong):
+        with self.assertRaises(FeatureNotAvailable):
             self.t("'123121323123131231223'.encode() * 5000", 20)
 
     def test_list_length_test(self):

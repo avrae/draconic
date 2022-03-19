@@ -1,10 +1,11 @@
 import ast
 import operator as op
-from collections import UserList
+from typing import Sequence
 
 from .exceptions import *
+from .types import *
 
-__all__ = ("DraconicConfig", "OperatorMixin", "approx_len_of", "safe_dict", "safe_list", "safe_set")
+__all__ = ("DraconicConfig", "OperatorMixin", "zip_star")
 
 # ===== config =====
 DISALLOW_PREFIXES = ['_', 'func_']
@@ -14,9 +15,12 @@ DISALLOW_METHODS = ['format', 'format_map', 'mro']
 class DraconicConfig:
     """A configuration object to pass into the Draconic interpreter."""
 
-    def __init__(self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
-                 max_power=1000, disallow_prefixes=None, disallow_methods=None,
-                 default_names=None, builtins_extend_default=True, max_recursion_depth=100):
+    def __init__(
+        self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
+        max_power=1000, disallow_prefixes=None, disallow_methods=None,
+        default_names=None, builtins_extend_default=True, max_int_size=64,
+        max_recursion_depth=100
+    ):
         """
         Configuration object for the Draconic interpreter.
 
@@ -29,6 +33,9 @@ class DraconicConfig:
         :param list disallow_methods: A list of str - methods named these will not be callable
         :param dict default_names: A dict of str: Any - default names in the runtime
         :param bool builtins_extend_default: If False, ``builtins`` to the interpreter overrides default names
+        :param int max_int_size: The maximum allowed size of integers (-2^(pow-1) to 2^(pow-1)-1). Default 64.
+                                 Integers can technically reach up to double this size before size check.
+                                 *Not* the max value!
         :param int max_recursion_depth: The maximum allowed recursion depth.
         """
         if disallow_prefixes is None:
@@ -41,6 +48,9 @@ class DraconicConfig:
         self.max_statements = max_statements
         self.max_power_base = max_power_base
         self.max_power = max_power
+        self.max_int_size = max_int_size
+        self.min_int = -(2 ** (max_int_size - 1))
+        self.max_int = (2 ** (max_int_size - 1)) - 1
         self.disallow_prefixes = disallow_prefixes
         self.disallow_methods = disallow_methods
         self.builtins_extend_default = builtins_extend_default
@@ -50,6 +60,7 @@ class DraconicConfig:
         self._list = safe_list(self)
         self._dict = safe_dict(self)
         self._set = safe_set(self)
+        self._str = safe_str(self)
 
         # default names
         if default_names is None:
@@ -68,11 +79,15 @@ class DraconicConfig:
     def set(self):
         return self._set
 
+    @property
+    def str(self):
+        return self._str
+
     def _default_names(self):
         return {
             "True": True, "False": False, "None": None,
             # functions
-            "bool": bool, "int": int, "float": float, "str": str, "tuple": tuple,
+            "bool": bool, "int": int, "float": float, "str": self.str, "tuple": tuple,
             "dict": self.dict, "list": self.list, "set": self.set
         }
 
@@ -90,12 +105,18 @@ class OperatorMixin:
         self.operators = {
             # binary
             ast.Add: self._safe_add,
-            ast.Sub: op.sub,
+            ast.Sub: self._safe_sub,
             ast.Mult: self._safe_mult,
             ast.Div: op.truediv,
             ast.FloorDiv: op.floordiv,
             ast.Pow: self._safe_power,
             ast.Mod: op.mod,
+            ast.LShift: self._safe_lshift,
+            ast.RShift: op.rshift,
+            ast.BitOr: op.or_,
+            ast.BitXor: op.xor,
+            ast.BitAnd: op.and_,
+            ast.Invert: op.invert,
             # unary
             ast.Not: op.not_,
             ast.USub: op.neg,
@@ -117,172 +138,83 @@ class OperatorMixin:
         """Exponent: limit power base and power to prevent CPU-locking computation"""
         if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
             _raise_in_context(NumberTooHigh, f"{a} ** {b} is too large of an exponent")
-        return a ** b
+        result = a ** b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This exponent would create a number too large")
+        return result
 
     def _safe_mult(self, a, b):
-        """Multiplication: limit the size of iterables that can be created"""
+        """Multiplication: limit the size of iterables that can be created, and the max size of ints"""
         # sequences can only be multiplied by ints, so this is safe
+        self._check_binop_operands(a, b)
         if isinstance(b, int) and b * approx_len_of(a) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
         if isinstance(a, int) and a * approx_len_of(b) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
-
-        return a * b
+        result = a * b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Multiplying these two would create a number too large")
+        return result
 
     def _safe_add(self, a, b):
-        """Addition: limit the size of iterables that can be created"""
+        """Addition: limit the size of iterables that can be created, and the max size of ints"""
+        self._check_binop_operands(a, b)
         if approx_len_of(a) + approx_len_of(b) > self._config.max_const_len:
             _raise_in_context(IterableTooLong, "Adding these two would create something too long")
-        return a + b
+        result = a + b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Adding these two would create a number too large")
+        return result
+
+    def _safe_sub(self, a, b):
+        """Addition: limit the max size of ints"""
+        self._check_binop_operands(a, b)
+        result = a - b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Subtracting these two would create a number too large")
+        return result
+
+    def _safe_lshift(self, a, b):
+        """Left Bit-Shift: limit the size of integers/floats to prevent CPU-locking computation"""
+        self._check_binop_operands(a, b)
+
+        if isinstance(b, int) and b > self._config.max_int_size - 2:
+            _raise_in_context(NumberTooHigh, f"{a} << {b} is too large of a shift")
+
+        result = a << b
+        if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "Shifting these two would create a number too large")
+
+        return a << b
+
+    def _check_binop_operands(self, a, b):
+        """Ensures both operands of a binary operation are safe (int limit)."""
+        if isinstance(a, int) and (a < self._config.min_int or a > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This number is too large")
+        if isinstance(b, int) and (b < self._config.min_int or b > self._config.max_int):
+            _raise_in_context(NumberTooHigh, "This number is too large")
 
 
-def approx_len_of(obj, visited=None):
-    """Gets the approximate size of an object (including recursive objects)."""
-    if isinstance(obj, str):
-        return len(obj)
+# ==== other utils ====
+def zip_star(a: Sequence, b: Sequence, star_index: int):
+    """
+    Like zip(a, b), but zips the element at ``a[star_index]`` with a list of 0..len(b) elements such that every other
+    element of ``a`` maps to exactly one element of ``b``.
 
-    if hasattr(obj, "__approx_len__"):
-        return obj.__approx_len__
+    >>> zip_star(['a', 'b', 'c'], [1, 2, 3, 4], star_index=1)  # like a, *b, c = [1, 2, 3, 4]
+    [('a', 1), ('b', [2, 3]), ('c', 4)]
+    >>> zip_star(['a', 'b', 'c'], [1, 2], star_index=1)  # like a, *b, c = [1, 2]
+    [('a', 1), ('b', []), ('c', 2)]
 
-    if visited is None:
-        visited = [obj]
+    Requires ``len(b) >= len(a) - 1`` and ``star_index < len(a)``.
+    """
+    if not 0 <= star_index < len(a):
+        raise IndexError("'star_index' must be a valid index of 'a'")
+    if not len(b) >= len(a) - 1:
+        raise ValueError("'b' must be no more than 1 shorter than 'a'")
 
-    size = op.length_hint(obj)
+    length_difference = len(b) - (len(a) - 1)
 
-    if isinstance(obj, dict):
-        obj = obj.items()
-
-    try:
-        for child in iter(obj):
-            if child in visited:
-                continue
-            size += approx_len_of(child, visited)
-            visited.append(child)
-    except TypeError:  # object is not iterable
-        pass
-
-    try:
-        setattr(obj, "__approx_len__", size)
-    except AttributeError:
-        pass
-
-    return size
-
-
-# ===== compound types =====
-# each function is a function that returns a class based on Draconic config
-# ... look, it works
-
-def safe_list(config):
-    class SafeList(UserList):  # extends UserList so that [x] * y returns a SafeList, not a list
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.__approx_len__ = approx_len_of(self)
-
-        def append(self, obj):
-            if approx_len_of(self) + 1 > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This list is too long")
-            super().append(obj)
-            self.__approx_len__ += 1
-
-        def extend(self, iterable):
-            other_len = approx_len_of(iterable)
-            if approx_len_of(self) + other_len > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This list is too long")
-            super().extend(iterable)
-            self.__approx_len__ += other_len
-
-        def pop(self, i=-1):
-            retval = super().pop(i)
-            self.__approx_len__ -= 1
-            return retval
-
-        def remove(self, item):
-            super().remove(item)
-            self.__approx_len__ -= 1
-
-        def clear(self):
-            super().clear()
-            self.__approx_len__ = 0
-
-    return SafeList
-
-
-def safe_set(config):
-    class SafeSet(set):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.__approx_len__ = approx_len_of(self)
-
-        def update(self, *s):
-            other_lens = sum(approx_len_of(other) for other in s)
-            if approx_len_of(self) + other_lens > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This set is too large")
-            super().update(*s)
-            self.__approx_len__ += other_lens
-
-        def add(self, element):
-            if approx_len_of(self) + 1 > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This set is too large")
-            super().add(element)
-            self.__approx_len__ += 1
-
-        def union(self, *s):
-            if approx_len_of(self) + sum(approx_len_of(other) for other in s) > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This set is too large")
-            return SafeSet(super().union(*s))
-
-        def pop(self):
-            retval = super().pop()
-            self.__approx_len__ -= 1
-            return retval
-
-        def remove(self, element):
-            super().remove(element)
-            self.__approx_len__ -= 1
-
-        def discard(self, element):
-            super().discard(element)
-            self.__approx_len__ -= 1
-
-        def clear(self):
-            super().clear()
-            self.__approx_len__ = 0
-
-    return SafeSet
-
-
-def safe_dict(config):
-    class SafeDict(dict):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.__approx_len__ = approx_len_of(self)
-
-        def update(self, other_dict=None, **kvs):
-            if other_dict is None:
-                other_dict = {}
-
-            other_lens = approx_len_of(other_dict) + approx_len_of(kvs)
-            if approx_len_of(self) + other_lens > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This dict is too large")
-
-            super().update(other_dict, **kvs)
-            self.__approx_len__ += other_lens
-
-        def __setitem__(self, key, value):
-            other_len = approx_len_of(value)
-            if approx_len_of(self) + other_len > config.max_const_len:
-                _raise_in_context(IterableTooLong, "This dict is too large")
-            self.__approx_len__ += other_len
-            return super().__setitem__(key, value)
-
-        def pop(self, k):
-            retval = super().pop(k)
-            self.__approx_len__ -= 1
-            return retval
-
-        def __delitem__(self, key):
-            super().__delitem__(key)
-            self.__approx_len__ -= 1
-
-    return SafeDict
+    yield from zip(a[:star_index], b[:star_index])
+    yield a[star_index], b[star_index:star_index + length_difference]
+    yield from zip(a[star_index + 1:], b[star_index + length_difference:])

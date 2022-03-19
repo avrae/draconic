@@ -1,13 +1,16 @@
 import pytest
 
-from draconic import DraconicInterpreter, SimpleInterpreter
-from draconic.helpers import DraconicConfig
+from draconic import DraconicInterpreter
 from draconic.exceptions import *
+from draconic.helpers import DraconicConfig
+from draconic.versions import PY_39
+from tests.utils import temp_limits
 
 
 @pytest.fixture()
 def i():
-    config = DraconicConfig(max_loops=99999999, max_const_len=1000)  # 1000-size iterables, don't limit us by loops
+    # 1000-size iterables, don't limit us by loops, signed 32b int limit
+    config = DraconicConfig(max_loops=99999999, max_const_len=1000, max_int_size=32)
     return DraconicInterpreter(config=config)
 
 
@@ -25,6 +28,26 @@ def test_creating(i, e):
     # lists
     with pytest.raises(FeatureNotAvailable):  # we don't allow this
         e(f"[*long, *long]")
+
+
+def test_f_string(i, e):
+    really_long_str = 'foo' * 1000
+    not_quite_as_long = 'f' * 999
+    i._names['long'] = really_long_str
+    i._names['lesslong'] = not_quite_as_long
+
+    assert e("lesslong") == not_quite_as_long
+    assert e("f'{lesslong}'") == not_quite_as_long
+    assert e("f'{lesslong}a'") == not_quite_as_long + 'a'
+
+    with pytest.raises(IterableTooLong):
+        e("f'{long}'")
+
+    with pytest.raises(IterableTooLong):
+        e("f'{lesslong}{lesslong}'")
+
+    with pytest.raises(IterableTooLong):
+        e("f'{lesslong}aaaaaa'")
 
 
 def test_list(i, e):
@@ -52,6 +75,7 @@ def test_set(i, e):
     i.builtins['range'] = range
     e("long = set(range(1000))")
     e("long2 = set(range(1000, 2000))")
+    e("longer = set(range(1001))")
 
     with pytest.raises(IterableTooLong):
         e("long.add(1000)")
@@ -60,17 +84,46 @@ def test_set(i, e):
         e("long.update(long2)")
 
     with pytest.raises(IterableTooLong):
+        e("long.update({1000})")
+
+    with pytest.raises(IterableTooLong):
         e("long.union(long2)")
 
     with pytest.raises(IterableTooLong):
-        e("long.update({1000})")
+        e("long | long2")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.intersection(longer)")
+
+    with pytest.raises(IterableTooLong):
+        e("longer & longer")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference(long2)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^ long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long |= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("longer &= longer")
+
+    with pytest.raises(IterableTooLong):
+        e("longer.intersection_update(longer)")
+
+    with pytest.raises(IterableTooLong):
+        e("long ^= long2")
+
+    with pytest.raises(IterableTooLong):
+        e("long.symmetric_difference_update(long2)")
 
     # we should always be operating using safe sets
     i.builtins['realset'] = {1, 2, 3}
     e("my_set = {3, 4, 5}")
-    # these operations don't work because sets use bitwise ops and we don't allow those
-    # assert isinstance(e("my_set | realset"), i._set)
-    # assert isinstance(e("realset | my_set"), i._set)
+    assert isinstance(e("my_set | realset"), i._set)
+    assert isinstance(e("realset | my_set"), i._set)
     e("my_set.update(realset)")
     assert isinstance(e("my_set"), i._set)
     assert isinstance(e("my_set.union(realset)"), i._set)
@@ -80,12 +133,23 @@ def test_dict(i, e):
     i.builtins['range'] = range
     e("long = dict((i, i) for i in range(1000))")
     e("long2 = {i: i for i in range(1000, 2000)}")
+    e("long_copy = long.copy()")
 
     with pytest.raises(IterableTooLong):
         e("long.update(long2)")
 
     with pytest.raises(IterableTooLong):
         e("long.update({'foo': 'bar'})")
+
+    with pytest.raises(IterableTooLong):
+        e("long['foo'] = 'bar'")
+
+    if PY_39:
+        with pytest.raises(IterableTooLong):
+            e("long | {'foo': 'bar'}")
+
+        with pytest.raises(IterableTooLong):
+            e("long_copy |= long2")
 
 
 def test_that_it_still_works_right(i, e):
@@ -104,6 +168,26 @@ def test_that_it_still_works_right(i, e):
     e("d.update({2: 2})")
     assert e("d") == {1: 1, 2: 2}
     assert isinstance(i.names['d'], i._dict)
+
+    pop = e("d.pop(2)")
+    assert e("d") == {1: 1}
+    assert pop == 2
+    assert isinstance(i.names['d'], i._dict)
+
+    e("d.update({2: 2})")
+
+    pop = e("d.pop(2, 3)")
+    assert e("d") == {1: 1}
+    assert pop == 2
+    assert isinstance(i.names['d'], i._dict)
+
+    pop = e("d.pop(2, 3)")
+    assert e("d") == {1: 1}
+    assert pop == 3
+    assert isinstance(i.names['d'], i._dict)
+
+    with pytest.raises(AnnotatedException):
+        e("d.pop(2)")
 
 
 def test_types(i, e):
@@ -139,3 +223,157 @@ def test_types_again(i, e):
     e("a = {1: 1, 2: 2}")
     e("b = dict(((1, 1), (2, 2)))")
     assert type(i.names['a']) is type(i.names['b']) is i._dict
+
+    e("a = 'foobar'")
+    e("b = str(123)")
+    assert type(i.names['a']) is type(i.names['b']) is i._str
+
+    i.builtins['typeof'] = lambda o: type(o).__name__
+    assert e('typeof(a)') == 'str'
+
+
+def test_int_limits(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # result is too large
+    with pytest.raises(NumberTooHigh):
+        e("max_int + 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int - -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int * 2")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int << 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("max_int * max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("2 ** 31")
+
+    with pytest.raises(NumberTooHigh):
+        e("2 << 31")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int * 2")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int << 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("min_int * -min_int")
+
+
+def test_int_limits_one_op(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # one operand is too large
+    e(f"over_max_int = {max_int + 1}")
+    e(f"under_min_int = {min_int - 1}")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 - over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("-1 + over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("over_max_int * 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 * over_max_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int - 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 - under_min_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int + -1")
+
+    with pytest.raises(NumberTooHigh):
+        e("-1 + under_min_int")
+
+    with pytest.raises(NumberTooHigh):
+        e("under_min_int * 1")
+
+    with pytest.raises(NumberTooHigh):
+        e("1 * under_min_int")
+
+
+def test_int_limits_not_floats(e):
+    max_int = (2 ** 31) - 1
+    min_int = -(2 ** 31)
+    e(f"max_int = {max_int}")
+    e(f"min_int = {min_int}")
+
+    # floats are fine
+    assert e("max_int * 1.5") == max_int * 1.5
+    assert e("max_int / 0.5") == max_int / 0.5
+    assert e("max_int // 0.5") == max_int // 0.5
+    assert type(e("max_int // 0.5")) is float
+
+    assert e("min_int * 1.5") == min_int * 1.5
+    assert e("min_int / 0.5") == min_int / 0.5
+    assert e("min_int // 0.5") == min_int // 0.5
+    assert type(e("min_int // 0.5")) is float
+
+
+@pytest.mark.timeout(3)  # list mult should be fast, even if we do it a lot
+def test_list_mult_speed(i):
+    expr = """
+    while True:
+        a = [0] * 10000
+    """.strip()
+    with temp_limits(i, max_loops=10000, max_const_len=10000):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
+
+
+def test_loop_limit(i):
+    expr = """
+    while True:
+        pass
+    """.strip()
+
+    expr2 = """
+    for _ in [0] * 101:
+        pass
+    """.strip()
+    with temp_limits(i, max_loops=100):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
+
+        with pytest.raises(TooManyStatements):
+            i.execute(expr2)
+
+
+def test_stmt_limit(i):
+    expr = """
+    a = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1
+    """.strip()
+    with temp_limits(i, max_statements=10):
+        with pytest.raises(TooManyStatements):
+            i.execute(expr)
