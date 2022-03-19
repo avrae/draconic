@@ -97,6 +97,14 @@ def test_invalid_args(ex):
         ex(expr)
 
     expr = """
+    def test_args(a):
+        pass
+    return test_args(1, a=2)
+    """
+    with pytest.raises(AnnotatedException, match="got multiple values"):
+        ex(expr)
+
+    expr = """
     def test_args(a, /, b):
         pass
     return test_args()
