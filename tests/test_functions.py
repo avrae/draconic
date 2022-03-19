@@ -1,9 +1,11 @@
+import math
+
 import pytest
 
 from draconic.exceptions import *
 
 
-def test_functions(ex):
+def test_basic_calls(ex):
     expr = """
     def times2(i):
         return i*2
@@ -119,6 +121,14 @@ def test_invalid_args(ex):
         ex(expr)
 
     expr = """
+    def test_args(a, *b, c):
+        pass
+    return test_args(1, 2)
+    """
+    with pytest.raises(AnnotatedException, match="missing required keyword argument"):
+        ex(expr)
+
+    expr = """
     def test_args(*, a):
         pass
     return test_args(a=1, b=2)
@@ -146,6 +156,35 @@ def test_recursion_factorial(ex):
     return fac(5)
     """
     assert ex(expr) == 120
+
+    expr = """
+    def fac(i):
+        if i < 1:
+            return 1
+        return i*fac(i-1)
+    return fac(20)
+    """
+    assert ex(expr) == math.factorial(20)
+
+    expr = """
+    def fac(i):
+        if i < 1:
+            return 1
+        return i*fac(i-1)
+    return fac(40)
+    """
+    with pytest.raises(NumberTooHigh):
+        ex(expr)
+
+    expr = """
+    def fac(i):
+        if i < 1:
+            return 1
+        return i*fac(i-1)
+    return fac(50)
+    """
+    with pytest.raises(TooMuchRecursion):
+        ex(expr)
 
 
 def test_recursion_limits(ex):
@@ -246,10 +285,10 @@ def test_function_scoping(ex):
         return a
     return a, incr_locally(), incr_locally(), a
     """
-    assert ex(expr) == (1, 2, 2, 1)
+    assert ex(expr) == (1, 2, 2, 1)  # NOTE: different from python 3.10, which raises UnboundLocalError
 
 
-def test_weird_edges(ex):
+def test_bare_loop_control(ex):
     expr = """
     def foo():
         break
@@ -311,7 +350,29 @@ def test_lambda_calculus(ex):
     assert ex(expr) == (2, 3, 6)
 
 
-def test_weird_breakouts(i, ex):
+def test_external_callers(i, ex):
+    i._names['map'] = map
+
+    expr = """
+    def first(i):
+        return i[0]
+    
+    def second(i):
+        return i[1]
+    
+    a = [(0, 3), (1, 2), (2, 1), (3, 0)]
+    return list(map(first, a)), list(map(second, a))
+    """
+    assert ex(expr) == ([0, 1, 2, 3], [3, 2, 1, 0])
+
+    expr = """
+    a = [(0, 3), (1, 2), (2, 1), (3, 0)]
+    return list(map(lambda i: i[0], a)), list(map(lambda i: i[1], a))
+    """
+    assert ex(expr) == ([0, 1, 2, 3], [3, 2, 1, 0])
+
+
+def test_breakout_default(i, ex):
     class Foo:  # random class with a private attr
         _private = 1
         public = 2
@@ -323,6 +384,21 @@ def test_weird_breakouts(i, ex):
         return baz
         
     return bar()
+    """
+    with pytest.raises(FeatureNotAvailable):
+        ex(expr)
+
+
+def test_breakout_external_caller(i, ex):
+    class Foo:
+        _private = 1
+        public = 2
+
+    i._names['foo'] = Foo()
+    i._names['map'] = map
+
+    expr = """
+    return list(map(lambda foo: foo._private, [foo]))
     """
     with pytest.raises(FeatureNotAvailable):
         ex(expr)

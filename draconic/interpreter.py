@@ -306,10 +306,10 @@ class DraconicInterpreter(SimpleInterpreter):
                 ast.Break: lambda node: _break_sentinel,
                 ast.Continue: lambda node: _continue_sentinel,
                 ast.Pass: lambda node: None,
-            # functions:
-            ast.FunctionDef: self._eval_functiondef,
-            ast.Lambda: self._eval_lambda
-        }
+                # functions:
+                ast.FunctionDef: self._eval_functiondef,
+                ast.Lambda: self._eval_lambda
+            }
         )
 
         self.assign_nodes = {
@@ -762,7 +762,8 @@ class DraconicInterpreter(SimpleInterpreter):
     class Function:
         """A wrapper class around an ast.FunctionDef."""
 
-        def __init__(self, functiondef, names_at_def):
+        def __init__(self, interpreter, functiondef, names_at_def):
+            self._interpreter = interpreter
             self._node = functiondef
             self._outer_scope_names = names_at_def
             self._name = functiondef.name
@@ -770,10 +771,15 @@ class DraconicInterpreter(SimpleInterpreter):
         def __repr__(self):
             return f"<Function {self._name}>"
 
+        def __call__(self, *args, **kwargs):
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_function(self._node, self, *args, **kwargs)
+
     class Lambda:
         """A wrapper class around an ast.Lambda."""
 
-        def __init__(self, lambdadef, names_at_def):
+        def __init__(self, interpreter, lambdadef, names_at_def):
+            self._interpreter = interpreter
             self._node = lambdadef
             self._outer_scope_names = names_at_def
             self._name = '<lambda>'
@@ -781,24 +787,16 @@ class DraconicInterpreter(SimpleInterpreter):
         def __repr__(self):
             return f"<Function <lambda>>"
 
-    # call override
-    def _eval_call(self, node):
-        func = self._eval(node.func)
-        args = (self._eval(a) for a in node.args)
-        kwargs = dict(self._eval(k) for k in node.keywords)
-        if isinstance(func, self.Function):
-            return self._exec_function(node, func, *args, **kwargs)
-        elif isinstance(func, self.Lambda):
-            return self._exec_lambda(node, func, *args, **kwargs)
-        # noinspection PyCallingNonCallable
-        return func(*args, **kwargs)
+        def __call__(self, *args, **kwargs):
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
 
     # definitions
     def _eval_functiondef(self, node):
-        self._names[node.name] = self.Function(node, self._names)
+        self._names[node.name] = self.Function(self, node, self._names)
 
     def _eval_lambda(self, node):
-        return self.Lambda(node, self._names)
+        return self.Lambda(self, node, self._names)
 
     # executions
     # noinspection PyProtectedMember
@@ -869,14 +867,17 @@ class DraconicInterpreter(SimpleInterpreter):
     def _exec_function(self, __calling_node, __functiondef: Function, /, *args, **kwargs):
         old_names = self._before_function_call(__calling_node, __functiondef, *args, **kwargs)
 
-        # execute function
         try:
-            self._exec(__functiondef._node.body)
-        except self._Return as r:
-            return r.value
-        except (self._Break, self._Continue):
-            raise DraconicSyntaxError(SyntaxError("Loop control outside loop",
-                                                  ("<string>", 1, 1, __functiondef._node.body)))
+            retval = self._exec(__functiondef._node.body)
+            if retval is _break_sentinel or retval is _continue_sentinel:
+                raise DraconicSyntaxError(
+                    SyntaxError(
+                        "Loop control outside loop",
+                        ("<string>", 1, 1, __functiondef._node.body)
+                    )
+                )
+            if isinstance(retval, _Return):
+                return retval.value
         finally:
             # restore old names
             self._names = old_names

@@ -18,8 +18,7 @@ class DraconicConfig:
     def __init__(
         self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
         max_power=1000, disallow_prefixes=None, disallow_methods=None,
-        default_names=None, builtins_extend_default=True, max_int_size=64,
-        max_recursion_depth=100
+        default_names=None, builtins_extend_default=True, max_int_size=64, max_recursion_depth=50
     ):
         """
         Configuration object for the Draconic interpreter.
