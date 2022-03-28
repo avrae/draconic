@@ -380,6 +380,36 @@ def test_external_callers(i, ex):
     assert ex(expr) == ([0, 1, 2, 3], [3, 2, 1, 0])
 
 
+def test_pass_by_value(i, ex):
+    i._names['foo'] = 1
+    expr = """
+    foo2 = 2
+    
+    def bar(target):
+        target += 1
+    
+    bar(foo)
+    bar(foo2)
+    return foo, foo2
+    """
+    assert ex(expr) == (1, 2)
+
+
+def test_pass_by_reference(i, ex):
+    i._names['foo'] = [1, 2, 3]
+    expr = """
+    foo2 = [1, 2, 3]
+    
+    def bar(target):
+        target.append(4)
+    
+    bar(foo)
+    bar(foo2)
+    return foo, foo2
+    """
+    assert ex(expr) == ([1, 2, 3], [1, 2, 3, 4])  # since true lists are immutable in our safe type system
+
+
 def test_breakout_default(i, ex):
     class Foo:  # random class with a private attr
         _private = 1
