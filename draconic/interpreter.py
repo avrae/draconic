@@ -273,6 +273,40 @@ class _Return:
         self.value = retval
 
 
+class _Function:
+    """A wrapper class around an ast.FunctionDef."""
+
+    def __init__(self, interpreter, functiondef, names_at_def):
+        self._interpreter = interpreter
+        self._node = functiondef
+        self._outer_scope_names = names_at_def
+        self._name = functiondef.name
+
+    def __repr__(self):
+        return f"<Function {self._name}>"
+
+    def __call__(self, *args, **kwargs):
+        # noinspection PyProtectedMember
+        return self._interpreter._exec_function(self._node, self, *args, **kwargs)
+
+
+class _Lambda:
+    """A wrapper class around an ast.Lambda."""
+
+    def __init__(self, interpreter, lambdadef, names_at_def):
+        self._interpreter = interpreter
+        self._node = lambdadef
+        self._outer_scope_names = names_at_def
+        self._name = '<lambda>'
+
+    def __repr__(self):
+        return f"<Function <lambda>>"
+
+    def __call__(self, *args, **kwargs):
+        # noinspection PyProtectedMember
+        return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
+
+
 class DraconicInterpreter(SimpleInterpreter):
     """The Draconic interpreter. Capable of running Draconic code."""
 
@@ -758,45 +792,12 @@ class DraconicInterpreter(SimpleInterpreter):
         return None
 
     # ===== functions =====
-    # classes
-    class Function:
-        """A wrapper class around an ast.FunctionDef."""
-
-        def __init__(self, interpreter, functiondef, names_at_def):
-            self._interpreter = interpreter
-            self._node = functiondef
-            self._outer_scope_names = names_at_def
-            self._name = functiondef.name
-
-        def __repr__(self):
-            return f"<Function {self._name}>"
-
-        def __call__(self, *args, **kwargs):
-            # noinspection PyProtectedMember
-            return self._interpreter._exec_function(self._node, self, *args, **kwargs)
-
-    class Lambda:
-        """A wrapper class around an ast.Lambda."""
-
-        def __init__(self, interpreter, lambdadef, names_at_def):
-            self._interpreter = interpreter
-            self._node = lambdadef
-            self._outer_scope_names = names_at_def
-            self._name = '<lambda>'
-
-        def __repr__(self):
-            return f"<Function <lambda>>"
-
-        def __call__(self, *args, **kwargs):
-            # noinspection PyProtectedMember
-            return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
-
     # definitions
     def _eval_functiondef(self, node):
-        self._names[node.name] = self.Function(self, node, self._names)
+        self._names[node.name] = _Function(self, node, self._names)
 
     def _eval_lambda(self, node):
-        return self.Lambda(self, node, self._names)
+        return _Lambda(self, node, self._names)
 
     # executions
     # noinspection PyProtectedMember
@@ -864,7 +865,7 @@ class DraconicInterpreter(SimpleInterpreter):
         return old_names
 
     # noinspection PyProtectedMember
-    def _exec_function(self, __calling_node, __functiondef: Function, /, *args, **kwargs):
+    def _exec_function(self, __calling_node, __functiondef: _Function, /, *args, **kwargs):
         old_names = self._before_function_call(__calling_node, __functiondef, *args, **kwargs)
 
         try:
@@ -885,7 +886,7 @@ class DraconicInterpreter(SimpleInterpreter):
             self._depth -= 1
 
     # noinspection PyProtectedMember
-    def _exec_lambda(self, __calling_node, __lambdadef: Lambda, /, *args, **kwargs):
+    def _exec_lambda(self, __calling_node, __lambdadef: _Lambda, /, *args, **kwargs):
         old_names = self._before_function_call(__calling_node, __lambdadef, *args, **kwargs)
 
         # execute function
