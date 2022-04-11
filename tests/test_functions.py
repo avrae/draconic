@@ -440,3 +440,14 @@ def test_breakout_external_caller(i, ex):
     """
     with pytest.raises(FeatureNotAvailable):
         ex(expr)
+
+
+def test_function_naming(ex):
+    expr = """
+    def foo():
+        pass
+    
+    bar = lambda: 0
+    return str(foo), str(bar)
+    """
+    assert ex(expr) == ("<Function foo>", "<Function <lambda>>")
