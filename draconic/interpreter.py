@@ -794,6 +794,8 @@ class DraconicInterpreter(SimpleInterpreter):
     # ===== functions =====
     # definitions
     def _eval_functiondef(self, node):
+        if node.name in self.builtins:
+            raise DraconicValueError(f"{node.name} is already builtin (no shadow assignments).", node)
         self._names[node.name] = _Function(self, node, self._names)
 
     def _eval_lambda(self, node):

@@ -451,3 +451,13 @@ def test_function_naming(ex):
     return str(foo), str(bar)
     """
     assert ex(expr) == ("<Function foo>", "<Function <lambda>>")
+
+
+def test_shadow_assignment(i, ex):
+    i.builtins["shadow"] = "spooky"
+    expr = """
+    def shadow():
+        return "scary"
+    """
+    with pytest.raises(DraconicValueError):
+        ex(expr)
