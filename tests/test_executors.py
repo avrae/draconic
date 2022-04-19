@@ -1,6 +1,5 @@
-import pytest
-
 from draconic.exceptions import *
+from . import utils
 
 
 def test_if_else(i, ex):
@@ -92,7 +91,7 @@ def test_namedexpr_if(i, ex):
     """
 
     assert ex(expr) is None
-    assert i.out__ == ['true']
+    assert i.out__ == ["true"]
 
 
 def test_namedexpr_for(i, ex):
@@ -122,7 +121,7 @@ def test_infinite_loops(ex):
     while 1:
         pass
     """
-    with pytest.raises(TooManyStatements):
+    with utils.raises(TooManyStatements):
         ex(expr)
 
     expr = """
@@ -130,7 +129,7 @@ def test_infinite_loops(ex):
     while i < 1000000000000000:
         i += 1
     """
-    with pytest.raises(TooManyStatements):
+    with utils.raises(TooManyStatements):
         ex(expr)
 
 
@@ -234,18 +233,18 @@ def test_return_for(ex):
 
 # outside
 def test_break_outside(e, ex):
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         ex("break")
 
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         e("break")
 
 
 def test_continue_outside(e, ex):
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         ex("continue")
 
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         e("continue")
 
 

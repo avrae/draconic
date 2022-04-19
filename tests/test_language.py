@@ -1,8 +1,5 @@
-import sys
-
-import pytest
-
 from draconic.exceptions import *
+from . import utils
 
 
 def test_comps(e):
@@ -67,7 +64,7 @@ class TestAssignments:
         e('d = c + 1')
         assert e('d') == 3
 
-        with pytest.raises(NotDefined):
+        with utils.raises(NotDefined):
             e('e = x')
 
     def test_augassign(self, e):
@@ -104,10 +101,10 @@ class TestAssignments:
         e('a += -2')
         assert e('a') == 1
 
-        with pytest.raises(NotDefined):
+        with utils.raises(NotDefined):
             e('b += 1')
 
-        with pytest.raises(DraconicSyntaxError):
+        with utils.raises(DraconicSyntaxError):
             e('a + 1 += 1')
 
     def test_assigning_expressions(self, e):
@@ -127,7 +124,7 @@ class TestAssignments:
         e('cb = cb.upper()')
         assert e('cb') == 'FOOFOOFOOFOO'
 
-        with pytest.raises(IterableTooLong):
+        with utils.raises(IterableTooLong):
             e('cb = cb * 1000000')
 
 
@@ -157,13 +154,13 @@ class TestCompoundAssignments:
         assert e('d') == 'foo'
 
     def test_bad_unpacks(self, e):
-        with pytest.raises(DraconicValueError):
+        with utils.raises(DraconicValueError):
             e('a, b, c = (1, 2)')
 
-        with pytest.raises(DraconicValueError):
+        with utils.raises(DraconicValueError):
             e('a, b = (1, 2, 3)')
 
-        with pytest.raises(DraconicValueError):
+        with utils.raises(DraconicValueError):
             e('a, b = 1')
 
     def test_iterator_unpack(self, i, e):
@@ -250,11 +247,11 @@ class TestNamedExpressions:
         assert e('(b := a + 1)') == 2
         assert e('b') == 2
 
-        with pytest.raises(NotDefined):
+        with utils.raises(NotDefined):
             e('(c := x)')
 
         e("d = [1, 2, 3]")
-        with pytest.raises(DraconicSyntaxError):
+        with utils.raises(DraconicSyntaxError):
             e("(d[0] := 0)")
 
     def test_assigning_expressions(self, e):
@@ -271,5 +268,5 @@ class TestNamedExpressions:
         assert e('(cb := cb.upper())') == 'FOOFOO'
         assert e('cb') == 'FOOFOO'
 
-        with pytest.raises(IterableTooLong):
+        with utils.raises(IterableTooLong):
             e('(cb := cb * 1000000)')

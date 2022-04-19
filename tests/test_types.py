@@ -1,7 +1,6 @@
-import pytest
-
 from draconic.exceptions import AnnotatedException
 from draconic.versions import PY_39
+from . import utils
 
 
 class TestList:
@@ -18,7 +17,7 @@ class TestList:
         assert e("a.pop(0)") == 1
         assert e("a") == [2]
 
-        with pytest.raises(AnnotatedException, match='pop index out of range'):
+        with utils.raises(AnnotatedException, match='pop index out of range'):
             e("a.pop(1)")
 
     def test_remove(self, e):
@@ -26,7 +25,7 @@ class TestList:
         e("a.remove(1)")
         assert e("a") == [2, 3]
 
-        with pytest.raises(AnnotatedException, match='not in list'):
+        with utils.raises(AnnotatedException, match='not in list'):
             e("a.remove(1)")
 
     def test_clear(self, e):
@@ -76,7 +75,7 @@ class TestSet:
         assert e("a.pop()") == 1
         assert e("a") == set()
 
-        with pytest.raises(AnnotatedException, match='pop from an empty set'):
+        with utils.raises(AnnotatedException, match='pop from an empty set'):
             e("a.pop()")
 
     def test_remove(self, e):
@@ -84,7 +83,7 @@ class TestSet:
         e("a.remove(1)")
         assert e("a") == {2, 3}
 
-        with pytest.raises(AnnotatedException, match='1'):  # KeyError
+        with utils.raises(AnnotatedException, match='1'):  # KeyError
             e("a.remove(1)")
 
     def test_discard(self, e):

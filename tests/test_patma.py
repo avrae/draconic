@@ -2,6 +2,7 @@ import pytest
 
 from draconic import DraconicValueError, FeatureNotAvailable
 from draconic.versions import PY_310
+from . import utils
 
 pytestmark = pytest.mark.skipif(not PY_310, reason="requires python 3.10")
 
@@ -203,7 +204,7 @@ def test_sequence_muliple_starred(ex):
         case [*a, *a]:
             pass
     """
-    with pytest.raises(DraconicValueError, match="multiple starred names"):
+    with utils.raises(DraconicValueError, match="multiple starred names"):
         ex(expr)
 
 
@@ -215,7 +216,7 @@ def test_sequence_multiple_assignment(ex):
         case [x, x, x]:
             print(x)
     """
-    with pytest.raises(DraconicValueError, match="multiple assignment"):
+    with utils.raises(DraconicValueError, match="multiple assignment"):
         ex(expr)
 
     # recursive too
@@ -225,7 +226,7 @@ def test_sequence_multiple_assignment(ex):
         case [x, [x]]:
             print(x)
     """
-    with pytest.raises(DraconicValueError, match="multiple assignment"):
+    with utils.raises(DraconicValueError, match="multiple assignment"):
         ex(expr)
 
 
@@ -266,7 +267,7 @@ def test_mapping_multiple_assignment(ex):
         case {1: a, 2: a}:
             pass
     """
-    with pytest.raises(DraconicValueError, match="multiple assignment"):
+    with utils.raises(DraconicValueError, match="multiple assignment"):
         ex(expr)
 
     expr = """
@@ -274,7 +275,7 @@ def test_mapping_multiple_assignment(ex):
         case {1: a, **a}:
             pass
     """
-    with pytest.raises(DraconicValueError, match="multiple assignment"):
+    with utils.raises(DraconicValueError, match="multiple assignment"):
         ex(expr)
 
 
@@ -303,7 +304,7 @@ def test_match_not_allowed(ex):
         case str(val):
             print(val)
     """
-    with pytest.raises(FeatureNotAvailable):
+    with utils.raises(FeatureNotAvailable):
         ex(expr)
 
 

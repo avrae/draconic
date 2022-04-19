@@ -3,6 +3,7 @@ import math
 import pytest
 
 from draconic.exceptions import *
+from . import utils
 
 
 def test_basic_calls(ex):
@@ -18,7 +19,7 @@ def test_basic_calls(ex):
         return a, b, c, d, e, args, kwargs
     return test_args(1, 2, c=3, e='foo')
     """
-    assert ex(expr) == (1, 2, 3, 2, 'foo', (), {})
+    assert ex(expr) == (1, 2, 3, 2, "foo", (), {})
 
 
 def test_valid_args(ex):
@@ -76,7 +77,7 @@ def test_valid_args(ex):
         return args, kwargs
     return test_args(1, 2, 3, a=1, b=2)
     """
-    assert ex(expr) == ((1, 2, 3), {'a': 1, 'b': 2})
+    assert ex(expr) == ((1, 2, 3), {"a": 1, "b": 2})
 
 
 def test_invalid_args(ex):
@@ -85,7 +86,7 @@ def test_invalid_args(ex):
         return a, b, c, d, e, args, kwargs
     return test_args()
     """
-    with pytest.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(TypeError, match="missing required positional argument"):
         ex(expr)
 
     expr = """
@@ -93,7 +94,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, 2)
     """
-    with pytest.raises(AnnotatedException, match="2 were given"):
+    with utils.raises(AnnotatedException, match="2 were given"):
         ex(expr)
 
     expr = """
@@ -101,7 +102,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, a=2)
     """
-    with pytest.raises(AnnotatedException, match="got multiple values"):
+    with utils.raises(AnnotatedException, match="got multiple values"):
         ex(expr)
 
     expr = """
@@ -109,7 +110,7 @@ def test_invalid_args(ex):
         pass
     return test_args()
     """
-    with pytest.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(AnnotatedException, match="missing required positional argument"):
         ex(expr)
 
     expr = """
@@ -117,7 +118,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1)
     """
-    with pytest.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(AnnotatedException, match="missing required positional argument"):
         ex(expr)
 
     expr = """
@@ -125,7 +126,7 @@ def test_invalid_args(ex):
         pass
     return test_args()
     """
-    with pytest.raises(AnnotatedException, match="missing required keyword argument"):
+    with utils.raises(AnnotatedException, match="missing required keyword argument"):
         ex(expr)
 
     expr = """
@@ -133,7 +134,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, 2)
     """
-    with pytest.raises(AnnotatedException, match="missing required keyword argument"):
+    with utils.raises(AnnotatedException, match="missing required keyword argument"):
         ex(expr)
 
     expr = """
@@ -141,7 +142,7 @@ def test_invalid_args(ex):
         pass
     return test_args(a=1, b=2)
     """
-    with pytest.raises(AnnotatedException, match="got unexpected keyword arguments"):
+    with utils.raises(AnnotatedException, match="got unexpected keyword arguments"):
         ex(expr)
 
     expr = """
@@ -151,7 +152,7 @@ def test_invalid_args(ex):
     """
     # this should be "got some positional-only arguments passed as keyword arguments" but that's annoying
     # so it's missing required positional argument
-    with pytest.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(AnnotatedException, match="missing required positional argument"):
         ex(expr)
 
 
@@ -181,7 +182,7 @@ def test_recursion_factorial(ex):
         return i*fac(i-1)
     return fac(40)
     """
-    with pytest.raises(NumberTooHigh):
+    with utils.raises(NumberTooHigh):
         ex(expr)
 
     expr = """
@@ -191,7 +192,7 @@ def test_recursion_factorial(ex):
         return i*fac(i-1)
     return fac(50)
     """
-    with pytest.raises(TooMuchRecursion):
+    with utils.raises(TooMuchRecursion):
         ex(expr)
 
 
@@ -201,7 +202,7 @@ def test_recursion_limits(ex):
         foo()
     foo()
     """
-    with pytest.raises(TooMuchRecursion):
+    with utils.raises(TooMuchRecursion):
         ex(expr)
 
 
@@ -233,7 +234,7 @@ def test_function_scoping(ex):
 
     return foo()
     """
-    with pytest.raises(NotDefined):
+    with utils.raises(NotDefined):
         ex(expr)
 
     expr = """
@@ -302,7 +303,7 @@ def test_bare_loop_control(ex):
         break
     foo()
     """
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         ex(expr)
 
     expr = """
@@ -310,7 +311,7 @@ def test_bare_loop_control(ex):
         continue
     foo()
     """
-    with pytest.raises(DraconicSyntaxError):
+    with utils.raises(DraconicSyntaxError):
         ex(expr)
 
 
@@ -359,7 +360,7 @@ def test_lambda_calculus(ex):
 
 
 def test_external_callers(i, ex):
-    i._names['map'] = map
+    i._names["map"] = map
 
     expr = """
     def first(i):
@@ -381,7 +382,7 @@ def test_external_callers(i, ex):
 
 
 def test_pass_by_value(i, ex):
-    i._names['foo'] = 1
+    i._names["foo"] = 1
     expr = """
     foo2 = 2
     
@@ -396,7 +397,7 @@ def test_pass_by_value(i, ex):
 
 
 def test_pass_by_reference(i, ex):
-    i._names['foo'] = [1, 2, 3]
+    i._names["foo"] = [1, 2, 3]
     expr = """
     foo2 = [1, 2, 3]
     
@@ -415,7 +416,7 @@ def test_breakout_default(i, ex):
         _private = 1
         public = 2
 
-    i._names['foo'] = Foo()
+    i._names["foo"] = Foo()
 
     expr = """
     def bar(baz=foo._private):
@@ -423,7 +424,7 @@ def test_breakout_default(i, ex):
         
     return bar()
     """
-    with pytest.raises(FeatureNotAvailable):
+    with utils.raises(FeatureNotAvailable):
         ex(expr)
 
 
@@ -432,13 +433,13 @@ def test_breakout_external_caller(i, ex):
         _private = 1
         public = 2
 
-    i._names['foo'] = Foo()
-    i._names['map'] = map
+    i._names["foo"] = Foo()
+    i._names["map"] = map
 
     expr = """
     return list(map(lambda foo: foo._private, [foo]))
     """
-    with pytest.raises(FeatureNotAvailable):
+    with utils.raises(FeatureNotAvailable):
         ex(expr)
 
 
@@ -459,5 +460,5 @@ def test_shadow_assignment(i, ex):
     def shadow():
         return "scary"
     """
-    with pytest.raises(DraconicValueError):
+    with utils.raises(DraconicValueError):
         ex(expr)
