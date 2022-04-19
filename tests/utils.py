@@ -16,11 +16,12 @@ def temp_limits(interpreter: OperatorMixin, **limits):
     interpreter._config = old_config
 
 
-# since we have custom error handling with AnnotatedException and NestedException, we have to wrap
-# pytest.raises() to account for situations where the actual expected exception is deep at the root of some expression
-# chain
 @contextlib.contextmanager
 def raises(expected_exception, **kwargs):
+    """
+    since we have custom error handling with AnnotatedException and NestedException, we have to wrap pytest.raises()
+    to account for situations where the actual expected exception is deep at the root of some expression chain
+    """
     if isinstance(expected_exception, tuple):
         inner_expected = (*expected_exception, AnnotatedException, NestedException)
     else:
