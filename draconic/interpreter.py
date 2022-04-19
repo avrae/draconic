@@ -55,28 +55,28 @@ class SimpleInterpreter(OperatorMixin):
         }
 
         self._str = self._config.str
+        self._expr = None  # save the expression for error handling
 
-    @staticmethod
-    def parse(expr):
+    def parse(self, expr: str):
         """
         Parses an expression.
 
         :type expr: str
         :rtype: list[ast.AST]
         """
+        self._expr = expr
         try:
             return ast.parse(expr).body
         except SyntaxError as e:
             raise DraconicSyntaxError(e)
 
-    def eval(self, expr):
+    def eval(self, expr: str):
         """
         Evaluates an expression.
 
         :type expr: list[ast.AST] or str
         """
-        if not isinstance(expr, list):
-            expr = self.parse(expr)
+        expr = self.parse(expr)
 
         self._preflight()
         try:
@@ -92,17 +92,17 @@ class SimpleInterpreter(OperatorMixin):
         except KeyError:
             raise FeatureNotAvailable(
                 "Sorry, {0} is not available in this "
-                "evaluator".format(type(node).__name__), node
+                "evaluator".format(type(node).__name__), node, self._expr
             )
 
         try:
             return handler(node)
         except _PostponedRaise as pr:
-            raise pr.cls(*pr.args, **pr.kwargs, node=node)
+            raise pr.cls(*pr.args, **pr.kwargs, node=node, expr=self._expr)
         except DraconicException:
             raise
         except Exception as e:
-            raise AnnotatedException(e, node)
+            raise AnnotatedException(e, node, self._expr) from e
 
     def _preflight(self):
         """Called before starting evaluation."""
@@ -127,17 +127,19 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_str(self, node):
         if len(node.s) > self._config.max_const_len:
             raise IterableTooLong(
-                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})", node
+                f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})",
+                node,
+                self._expr
             )
         return self._str(node.s)
 
     def _eval_constant(self, node):
         if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
-                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node
+                f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node, self._expr
             )
         if isinstance(node.value, bytes):
-            raise FeatureNotAvailable("Creation of bytes literals is not allowed", node)
+            raise FeatureNotAvailable("Creation of bytes literals is not allowed", node, self._expr)
         return node.value
 
     def _eval_unaryop(self, node):
@@ -192,7 +194,7 @@ class SimpleInterpreter(OperatorMixin):
         try:
             return self.names[node.id]
         except KeyError:
-            raise NotDefined(f"{node.id} is not defined", node)
+            raise NotDefined(f"{node.id} is not defined", node, self._expr)
 
     def _eval_subscript(self, node):
         container = self._eval(node.value)
@@ -205,9 +207,9 @@ class SimpleInterpreter(OperatorMixin):
     def _eval_attribute(self, node):
         for prefix in self._config.disallow_prefixes:
             if node.attr.startswith(prefix):
-                raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node)
+                raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node, self._expr)
         if node.attr in self._config.disallow_methods:
-            raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node)
+            raise FeatureNotAvailable(f"Access to the {node.attr} attribute is not allowed", node, self._expr)
         # eval node
         node_evaluated = self._eval(node.value)
 
@@ -224,7 +226,7 @@ class SimpleInterpreter(OperatorMixin):
             pass
 
         # If it is neither, raise an exception
-        raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node)
+        raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node, self._expr)
 
     def _eval_index(self, node):
         return self._eval(node.value)
@@ -248,7 +250,7 @@ class SimpleInterpreter(OperatorMixin):
             if length > self._config.max_const_len:
                 raise IterableTooLong(
                     f"f-string in statement is too long ({length} > {self._config.max_const_len})",
-                    node
+                    node, self._expr
                 )
             evaluated_values.append(val)
         return ''.join(evaluated_values)
@@ -276,35 +278,43 @@ class _Return:
 class _Function:
     """A wrapper class around an ast.FunctionDef."""
 
-    def __init__(self, interpreter, functiondef, names_at_def):
+    def __init__(self, interpreter, functiondef, names_at_def, defining_expr):
         self._interpreter = interpreter
         self._node = functiondef
         self._outer_scope_names = names_at_def
         self._name = functiondef.name
+        self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function {self._name}>"
 
     def __call__(self, *args, **kwargs):
-        # noinspection PyProtectedMember
-        return self._interpreter._exec_function(self._node, self, *args, **kwargs)
+        try:
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_function(self._node, self, *args, **kwargs)
+        except DraconicException as e:
+            raise NestedException(e.msg, self._node, self._defining_expr, last_exc=e) from e
 
 
 class _Lambda:
     """A wrapper class around an ast.Lambda."""
 
-    def __init__(self, interpreter, lambdadef, names_at_def):
+    def __init__(self, interpreter, lambdadef, names_at_def, defining_expr):
         self._interpreter = interpreter
         self._node = lambdadef
         self._outer_scope_names = names_at_def
         self._name = '<lambda>'
+        self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function <lambda>>"
 
     def __call__(self, *args, **kwargs):
-        # noinspection PyProtectedMember
-        return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
+        try:
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
+        except DraconicException as e:
+            raise NestedException(e.msg, self._node, self._defining_expr, last_exc=e) from e
 
 
 class DraconicInterpreter(SimpleInterpreter):
@@ -387,7 +397,7 @@ class DraconicInterpreter(SimpleInterpreter):
         self._depth = 1
         self._names = initial_names
 
-    def eval(self, expr):
+    def eval(self, expr: str):
         retval = super().eval(expr)
         if isinstance(retval, _Return):
             return retval.value
@@ -400,14 +410,9 @@ class DraconicInterpreter(SimpleInterpreter):
             )
         return retval
 
-    def execute(self, expr):
-        """
-        Executes an AST body.
-
-        :type expr: str or list[ast.AST]
-        """
-        if not isinstance(expr, list):
-            expr = self.parse(expr)
+    def execute(self, expr: str):
+        """Executes an AST body."""
+        expr = self.parse(expr)
 
         self._preflight()
         retval = self._exec(expr)
@@ -429,7 +434,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _eval(self, node):
         self._num_stmts += 1
         if self._num_stmts > self._config.max_statements:
-            raise TooManyStatements("You are trying to execute too many statements.", node)
+            raise TooManyStatements("You are trying to execute too many statements.", node, self._expr)
 
         val = super()._eval(node)
         # ensure that it's always an instance of our safe compound types being returned
@@ -527,7 +532,7 @@ class DraconicInterpreter(SimpleInterpreter):
             for i in self._eval(generator_node.iter):
                 self._loops += 1
                 if self._loops > self._config.max_loops:
-                    raise IterableTooLong('Comprehension generates too many elements', comprehension_node)
+                    raise IterableTooLong('Comprehension generates too many elements', comprehension_node, self._expr)
 
                 # set names
                 recurse_targets(generator_node.target, i)
@@ -568,13 +573,13 @@ class DraconicInterpreter(SimpleInterpreter):
         try:
             handler = self.assign_nodes[type(names)]
         except KeyError:
-            raise FeatureNotAvailable("Assignment to {} is not allowed".format(type(names).__name__), names)
+            raise FeatureNotAvailable(f"Assignment to {type(names).__name__} is not allowed", names, self._expr)
         # noinspection PyArgumentList
         return handler(names, values)
 
     def _assign_name(self, name, value):
         if name.id in self.builtins:
-            raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).", name)
+            raise DraconicValueError(f"{name.id} is already builtin (no shadow assignments).", name, self._expr)
         self._names[name.id] = value
 
     def _assign_subscript(self, name, value):
@@ -589,10 +594,14 @@ class DraconicInterpreter(SimpleInterpreter):
             try:
                 values = list(iter(values))
             except TypeError:
-                raise DraconicValueError("Cannot unpack non-iterable {} object".format(type(values).__name__), names)
+                raise DraconicValueError(
+                    f"Cannot unpack non-iterable {type(values).__name__} object",
+                    names,
+                    self._expr
+                )
             if not len(names.elts) == len(values):
                 raise DraconicValueError(
-                    "Unequal unpack: {} names, {} values".format(len(names.elts), len(values)), names
+                    f"Unequal unpack: {len(names.elts)} names, {len(values)} values", names, self._expr
                 )
             for t, v in zip(names.elts, values):
                 self._assign_unpack(t, v)
@@ -612,7 +621,7 @@ class DraconicInterpreter(SimpleInterpreter):
         for item in self._eval(node.iter):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in for block)', node)
+                raise TooManyStatements('Too many loops (in for block)', node, self._expr)
 
             self._assign(node.target, item)
             retval = self._exec(node.body)
@@ -629,7 +638,7 @@ class DraconicInterpreter(SimpleInterpreter):
         while self._eval(node.test):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in while block)', node)
+                raise TooManyStatements('Too many loops (in while block)', node, self._expr)
 
             retval = self._exec(node.body)
             if isinstance(retval, _Return):
@@ -664,7 +673,7 @@ class DraconicInterpreter(SimpleInterpreter):
         try:
             handler = self.patma_nodes[type(pattern)]
         except KeyError:
-            raise FeatureNotAvailable(f"Matching on {type(pattern).__name__} is not allowed", pattern)
+            raise FeatureNotAvailable(f"Matching on {type(pattern).__name__} is not allowed", pattern, self._expr)
         self._num_stmts += 1
         return handler(pattern, subject)
 
@@ -692,7 +701,7 @@ class DraconicInterpreter(SimpleInterpreter):
             # multiple starred names
             raise DraconicValueError(
                 f"multiple starred names in sequence pattern",
-                node
+                node, self._expr
             )
         elif match_star_idxs:
             # one starred name
@@ -719,7 +728,7 @@ class DraconicInterpreter(SimpleInterpreter):
             if bound_names.intersection(match):
                 raise DraconicValueError(
                     f"multiple assignment to names {sorted(bound_names.intersection(match))} in sequence pattern",
-                    node
+                    node, self._expr
                 )
             bindings.update(match)
             bound_names.update(match)
@@ -749,7 +758,7 @@ class DraconicInterpreter(SimpleInterpreter):
             if bound_names.intersection(match):
                 raise DraconicValueError(
                     f"multiple assignment to names {sorted(bound_names.intersection(match))} in mapping pattern",
-                    node
+                    node, self._expr
                 )
             bindings.update(match)
             bound_names.update(match)
@@ -759,7 +768,7 @@ class DraconicInterpreter(SimpleInterpreter):
             if node.rest in bound_names:
                 raise DraconicValueError(
                     f"multiple assignment to name {node.rest!r} in mapping pattern",
-                    node
+                    node, self._expr
                 )
             bindings[node.rest] = {k: v for k, v in subject.items() if k not in bound_keys}
 
@@ -795,11 +804,11 @@ class DraconicInterpreter(SimpleInterpreter):
     # definitions
     def _eval_functiondef(self, node):
         if node.name in self.builtins:
-            raise DraconicValueError(f"{node.name} is already builtin (no shadow assignments).", node)
-        self._names[node.name] = _Function(self, node, self._names)
+            raise DraconicValueError(f"{node.name} is already builtin (no shadow assignments).", node, self._expr)
+        self._names[node.name] = _Function(self, node, self._names, self._expr)
 
     def _eval_lambda(self, node):
-        return _Lambda(self, node, self._names)
+        return _Lambda(self, node, self._names, self._expr)
 
     # executions
     # noinspection PyProtectedMember
@@ -809,7 +818,7 @@ class DraconicInterpreter(SimpleInterpreter):
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
-            raise TooMuchRecursion('Maximum recursion depth exceeded', __calling_node)
+            raise TooMuchRecursion('Maximum recursion depth exceeded', __calling_node, self._expr)
         # bind closure names
         self._names = __functiondef._outer_scope_names.copy()
         # check and bind args
