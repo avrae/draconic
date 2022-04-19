@@ -1,4 +1,5 @@
 import ast
+import contextlib
 from collections.abc import Mapping, Sequence
 
 from .exceptions import *
@@ -289,11 +290,8 @@ class _Function:
         return f"<Function {self._name}>"
 
     def __call__(self, *args, **kwargs):
-        try:
-            # noinspection PyProtectedMember
-            return self._interpreter._exec_function(self._node, self, *args, **kwargs)
-        except DraconicException as e:
-            raise NestedException(e.msg, self._node, self._defining_expr, last_exc=e) from e
+        # noinspection PyProtectedMember
+        return self._interpreter._exec_function(self._node, self, *args, **kwargs)
 
 
 class _Lambda:
@@ -310,11 +308,8 @@ class _Lambda:
         return f"<Function <lambda>>"
 
     def __call__(self, *args, **kwargs):
-        try:
-            # noinspection PyProtectedMember
-            return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
-        except DraconicException as e:
-            raise NestedException(e.msg, self._node, self._defining_expr, last_exc=e) from e
+        # noinspection PyProtectedMember
+        return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
 
 
 class DraconicInterpreter(SimpleInterpreter):
@@ -811,16 +806,25 @@ class DraconicInterpreter(SimpleInterpreter):
         return _Lambda(self, node, self._names, self._expr)
 
     # executions
+    def _eval_call(self, node):
+        try:
+            return super()._eval_call(node)
+        except DraconicException as e:
+            raise NestedException(e.msg, node, self._expr, last_exc=e) from e
+
     # noinspection PyProtectedMember
-    def _before_function_call(self, __calling_node, __functiondef, /, *args, **kwargs):
-        # store current names
+    @contextlib.contextmanager
+    def _function_call_context(self, __calling_node, __functiondef, /, *args, **kwargs):
+        # store current names and expression
         old_names = self._names
+        old_expr = self._expr
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
             raise TooMuchRecursion('Maximum recursion depth exceeded', __calling_node, self._expr)
-        # bind closure names
+        # bind closure names and contextual expression
         self._names = __functiondef._outer_scope_names.copy()
+        self._expr = __functiondef._defining_expr
         # check and bind args
         arguments = __functiondef._node.args
         # check valid pos num
@@ -872,14 +876,19 @@ class DraconicInterpreter(SimpleInterpreter):
         elif kwargs:  # and arguments.kwarg is None (implicit)
             raise TypeError(f"{__functiondef._name}() got unexpected keyword arguments: {tuple(kwargs.keys())}")
 
-        # return the old names so we can rebind them later
-        return old_names
+        # yield control to the call
+        try:
+            yield
+        finally:
+            # restore old names and expr
+            self._names = old_names
+            self._expr = old_expr
+            # reduce recursion depth
+            self._depth -= 1
 
     # noinspection PyProtectedMember
     def _exec_function(self, __calling_node, __functiondef: _Function, /, *args, **kwargs):
-        old_names = self._before_function_call(__calling_node, __functiondef, *args, **kwargs)
-
-        try:
+        with self._function_call_context(__calling_node, __functiondef, *args, **kwargs):
             retval = self._exec(__functiondef._node.body)
             if retval is _break_sentinel or retval is _continue_sentinel:
                 raise DraconicSyntaxError(
@@ -890,21 +899,8 @@ class DraconicInterpreter(SimpleInterpreter):
                 )
             if isinstance(retval, _Return):
                 return retval.value
-        finally:
-            # restore old names
-            self._names = old_names
-            # reduce recursion depth
-            self._depth -= 1
 
     # noinspection PyProtectedMember
     def _exec_lambda(self, __calling_node, __lambdadef: _Lambda, /, *args, **kwargs):
-        old_names = self._before_function_call(__calling_node, __lambdadef, *args, **kwargs)
-
-        # execute function
-        try:
+        with self._function_call_context(__calling_node, __lambdadef, *args, **kwargs):
             return self._eval(__lambdadef._node.body)
-        finally:
-            # restore old names
-            self._names = old_names
-            # reduce recursion depth
-            self._depth -= 1
