@@ -291,7 +291,7 @@ class _Function:
 
     def __call__(self, *args, **kwargs):
         # noinspection PyProtectedMember
-        return self._interpreter._exec_function(self._node, self, *args, **kwargs)
+        return self._interpreter._exec_function(self, *args, **kwargs)
 
 
 class _Lambda:
@@ -309,7 +309,7 @@ class _Lambda:
 
     def __call__(self, *args, **kwargs):
         # noinspection PyProtectedMember
-        return self._interpreter._exec_lambda(self._node, self, *args, **kwargs)
+        return self._interpreter._exec_lambda(self, *args, **kwargs)
 
 
 class DraconicInterpreter(SimpleInterpreter):
@@ -814,17 +814,31 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # noinspection PyProtectedMember
     @contextlib.contextmanager
-    def _function_call_context(self, __calling_node, __functiondef, /, *args, **kwargs):
-        # store current names and expression
-        old_names = self._names
-        old_expr = self._expr
+    def _function_call_context(self, __functiondef, /, *args, **kwargs):
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
-            raise TooMuchRecursion('Maximum recursion depth exceeded', __calling_node, self._expr)
+            _raise_in_context(TooMuchRecursion, 'Maximum recursion depth exceeded')
+        # store current names and expression
+        old_names = self._names
+        old_expr = self._expr
         # bind closure names and contextual expression
         self._names = __functiondef._outer_scope_names.copy()
         self._expr = __functiondef._defining_expr
+
+        # yield control to the call
+        try:
+            self._bind_function_args(__functiondef, *args, **kwargs)
+            yield
+        finally:
+            # restore old names and expr
+            self._names = old_names
+            self._expr = old_expr
+            # reduce recursion depth
+            self._depth -= 1
+
+    # noinspection PyProtectedMember
+    def _bind_function_args(self, __functiondef, /, *args, **kwargs):
         # check and bind args
         arguments = __functiondef._node.args
         # check valid pos num
@@ -876,19 +890,9 @@ class DraconicInterpreter(SimpleInterpreter):
         elif kwargs:  # and arguments.kwarg is None (implicit)
             raise TypeError(f"{__functiondef._name}() got unexpected keyword arguments: {tuple(kwargs.keys())}")
 
-        # yield control to the call
-        try:
-            yield
-        finally:
-            # restore old names and expr
-            self._names = old_names
-            self._expr = old_expr
-            # reduce recursion depth
-            self._depth -= 1
-
     # noinspection PyProtectedMember
-    def _exec_function(self, __calling_node, __functiondef: _Function, /, *args, **kwargs):
-        with self._function_call_context(__calling_node, __functiondef, *args, **kwargs):
+    def _exec_function(self, __functiondef: _Function, /, *args, **kwargs):
+        with self._function_call_context(__functiondef, *args, **kwargs):
             retval = self._exec(__functiondef._node.body)
             if retval is _break_sentinel or retval is _continue_sentinel:
                 raise DraconicSyntaxError(
@@ -901,6 +905,6 @@ class DraconicInterpreter(SimpleInterpreter):
                 return retval.value
 
     # noinspection PyProtectedMember
-    def _exec_lambda(self, __calling_node, __lambdadef: _Lambda, /, *args, **kwargs):
-        with self._function_call_context(__calling_node, __lambdadef, *args, **kwargs):
+    def _exec_lambda(self, __lambdadef: _Lambda, /, *args, **kwargs):
+        with self._function_call_context(__lambdadef, *args, **kwargs):
             return self._eval(__lambdadef._node.body)
