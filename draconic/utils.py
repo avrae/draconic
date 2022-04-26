@@ -56,8 +56,8 @@ def extract_line_info(exc: Union[InvalidExpression, DraconicSyntaxError]):
     return LineInfo(
         exc.lineno,
         exc.offset - 1,
-        getattr(exc, "end_lineno", None),
-        (exc.end_offset - 1) if hasattr(exc, "end_offset") else None,
+        exc.end_lineno,
+        (exc.end_offset - 1) if exc.end_offset is not None else None,
     )
 
 
