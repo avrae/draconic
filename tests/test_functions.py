@@ -1,7 +1,5 @@
 import math
 
-import pytest
-
 from draconic.exceptions import *
 from . import utils
 
@@ -94,7 +92,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, 2)
     """
-    with utils.raises(AnnotatedException, match="2 were given"):
+    with utils.raises(TypeError, match="2 were given"):
         ex(expr)
 
     expr = """
@@ -102,7 +100,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, a=2)
     """
-    with utils.raises(AnnotatedException, match="got multiple values"):
+    with utils.raises(TypeError, match="got multiple values"):
         ex(expr)
 
     expr = """
@@ -110,7 +108,7 @@ def test_invalid_args(ex):
         pass
     return test_args()
     """
-    with utils.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(TypeError, match="missing required positional argument"):
         ex(expr)
 
     expr = """
@@ -118,7 +116,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1)
     """
-    with utils.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(TypeError, match="missing required positional argument"):
         ex(expr)
 
     expr = """
@@ -126,7 +124,7 @@ def test_invalid_args(ex):
         pass
     return test_args()
     """
-    with utils.raises(AnnotatedException, match="missing required keyword argument"):
+    with utils.raises(TypeError, match="missing required keyword argument"):
         ex(expr)
 
     expr = """
@@ -134,7 +132,7 @@ def test_invalid_args(ex):
         pass
     return test_args(1, 2)
     """
-    with utils.raises(AnnotatedException, match="missing required keyword argument"):
+    with utils.raises(TypeError, match="missing required keyword argument"):
         ex(expr)
 
     expr = """
@@ -142,7 +140,7 @@ def test_invalid_args(ex):
         pass
     return test_args(a=1, b=2)
     """
-    with utils.raises(AnnotatedException, match="got unexpected keyword arguments"):
+    with utils.raises(TypeError, match="got unexpected keyword arguments"):
         ex(expr)
 
     expr = """
@@ -152,7 +150,7 @@ def test_invalid_args(ex):
     """
     # this should be "got some positional-only arguments passed as keyword arguments" but that's annoying
     # so it's missing required positional argument
-    with utils.raises(AnnotatedException, match="missing required positional argument"):
+    with utils.raises(TypeError, match="missing required positional argument"):
         ex(expr)
 
 

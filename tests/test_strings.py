@@ -49,7 +49,7 @@ def test_format_map(e):
 def test_join(e):
     assert e("'foo'.join('bar')") == 'bfooafoor'
     assert e("'foo'.join(['b', 'a', 'r'])") == 'bfooafoor'
-    with utils.raises(AnnotatedException, match='expected str instance, int found'):
+    with utils.raises(TypeError, match='expected str instance, int found'):
         e("'foo'.join([1, 2, 3])")
     with utils.raises(IterableTooLong):
         e("(' ' * 999).join(' ' * 999)")
@@ -115,7 +115,7 @@ def test_fstring_limits(i, e):
     with utils.raises(IterableTooLong):
         e("f'{c:500.501f}'")
 
-    with utils.raises(AnnotatedException, match="Invalid format specifier"):
+    with utils.raises(ValueError, match="Invalid format specifier"):
         e("f'{c:foobar}'")
 
 
@@ -149,23 +149,23 @@ def test_printf_templating_limits(i, e):
 
 
 def test_printf_templating_edges(e):
-    with utils.raises(AnnotatedException, match="format requires a mapping"):
+    with utils.raises(TypeError, match="format requires a mapping"):
         e("'%(foo)s' % 0")
 
-    with utils.raises(AnnotatedException, match="'foo'"):
+    with utils.raises(KeyError, match="'foo'"):
         e("'%(foo)s' % {}")
 
-    with utils.raises(AnnotatedException, match="not enough arguments for format string"):
+    with utils.raises(TypeError, match="not enough arguments for format string"):
         e("'%s %s' % 0")
 
-    with utils.raises(AnnotatedException, match="not enough arguments for format string"):
+    with utils.raises(TypeError, match="not enough arguments for format string"):
         e("'%s %s' % [0]")
 
-    with utils.raises(AnnotatedException, match="format requires a mapping"):
+    with utils.raises(TypeError, match="format requires a mapping"):
         e("'%s %(foo)s' % 0")
 
     assert e("'%s %(foo)s' % {'foo': 0}") == "{'foo': 0} 0"
-    with utils.raises(AnnotatedException, match="not enough arguments for format string"):
+    with utils.raises(TypeError, match="not enough arguments for format string"):
         e("'%(foo)s %s' % {'foo': 0}")
 
     assert e("'%%(foo)s %s' % {'foo': 0}") == "%(foo)s {'foo': 0}"  # this was actually a typo, but it's a good test
@@ -179,7 +179,7 @@ def test_getattr(i, e):
             "d": {"abc": "abc", 123: 123, ("1", 1): ("1", 1)},
             "l": [1, 2, "3"]
         }
-        )
+    )
     assert e("d['abc']") == 'abc'
     assert e("d[123]") == 123
     assert e("d[('1', 1)]") == ("1", 1)

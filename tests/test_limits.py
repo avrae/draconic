@@ -187,7 +187,7 @@ def test_that_it_still_works_right(i, e):
     assert pop == 3
     assert isinstance(i.names['d'], i._dict)
 
-    with utils.raises(AnnotatedException):
+    with utils.raises(KeyError):
         e("d.pop(2)")
 
 
