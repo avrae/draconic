@@ -86,6 +86,7 @@ DraconicSyntaxError: invalid syntax. Perhaps you forgot a comma?
 """
 
 
+@pytest.mark.skipif(not PY_310, reason="requires python 3.10 - different behaviour in earlier versions")
 def test_multiline_syntax_error(i):
     expr = """
     (
