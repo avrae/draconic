@@ -69,7 +69,7 @@ class SimpleInterpreter(OperatorMixin):
         try:
             return ast.parse(expr).body
         except SyntaxError as e:
-            raise DraconicSyntaxError(e)
+            raise DraconicSyntaxError(e, expr) from e
 
     def eval(self, expr: str):
         """
@@ -265,8 +265,18 @@ class SimpleInterpreter(OperatorMixin):
 
 
 # ===== multiple-line execution, assignment, compound types =====
-_break_sentinel = object()
-_continue_sentinel = object()
+class _Break:
+    __slots__ = ("node",)
+
+    def __init__(self, node: ast.Break):
+        self.node = node
+
+
+class _Continue:
+    __slots__ = ("node",)
+
+    def __init__(self, node: ast.Continue):
+        self.node = node
 
 
 class _Return:
@@ -283,15 +293,19 @@ class _Function:
         self._interpreter = interpreter
         self._node = functiondef
         self._outer_scope_names = names_at_def
-        self._name = functiondef.name
+        self.__name__ = self._name = functiondef.name
         self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function {self._name}>"
 
     def __call__(self, *args, **kwargs):
-        # noinspection PyProtectedMember
-        return self._interpreter._exec_function(self, *args, **kwargs)
+        try:
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_function(self, *args, **kwargs)
+        except DraconicException as e:
+            e.__drac_context__ = self._name
+            raise
 
 
 class _Lambda:
@@ -301,15 +315,19 @@ class _Lambda:
         self._interpreter = interpreter
         self._node = lambdadef
         self._outer_scope_names = names_at_def
-        self._name = '<lambda>'
+        self.__name__ = self._name = '<lambda>'
         self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function <lambda>>"
 
     def __call__(self, *args, **kwargs):
-        # noinspection PyProtectedMember
-        return self._interpreter._exec_lambda(self, *args, **kwargs)
+        try:
+            # noinspection PyProtectedMember
+            return self._interpreter._exec_lambda(self, *args, **kwargs)
+        except DraconicException as e:
+            e.__drac_context__ = self._name
+            raise
 
 
 class DraconicInterpreter(SimpleInterpreter):
@@ -342,8 +360,8 @@ class DraconicInterpreter(SimpleInterpreter):
                 ast.If: self._exec_if,
                 ast.For: self._exec_for,
                 ast.While: self._exec_while,
-                ast.Break: lambda node: _break_sentinel,
-                ast.Continue: lambda node: _continue_sentinel,
+                ast.Break: lambda node: _Break(node),
+                ast.Continue: lambda node: _Continue(node),
                 ast.Pass: lambda node: None,
                 # functions:
                 ast.FunctionDef: self._eval_functiondef,
@@ -396,13 +414,8 @@ class DraconicInterpreter(SimpleInterpreter):
         retval = super().eval(expr)
         if isinstance(retval, _Return):
             return retval.value
-        elif retval is _break_sentinel or retval is _continue_sentinel:
-            raise DraconicSyntaxError(
-                SyntaxError(
-                    "Loop control outside loop",
-                    ("<string>", 1, 1, expr)
-                )
-            )
+        elif isinstance(retval, (_Break, _Continue)):
+            raise DraconicSyntaxError.from_node(retval.node, msg="Loop control outside loop", expr=self._expr)
         return retval
 
     def execute(self, expr: str):
@@ -411,13 +424,8 @@ class DraconicInterpreter(SimpleInterpreter):
 
         self._preflight()
         retval = self._exec(expr)
-        if retval is _break_sentinel or retval is _continue_sentinel:
-            raise DraconicSyntaxError(
-                SyntaxError(
-                    "Loop control outside loop",
-                    ("<string>", 1, 1, expr)
-                )
-            )
+        if isinstance(retval, (_Break, _Continue)):
+            raise DraconicSyntaxError.from_node(retval.node, msg="Loop control outside loop", expr=self._expr)
         if isinstance(retval, _Return):
             return retval.value
 
@@ -448,7 +456,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _exec(self, body):
         for expression in body:
             retval = self._eval(expression)
-            if isinstance(retval, _Return) or retval is _break_sentinel or retval is _continue_sentinel:
+            if isinstance(retval, (_Return, _Break, _Continue)):
                 return retval
 
     @property
@@ -622,9 +630,9 @@ class DraconicInterpreter(SimpleInterpreter):
             retval = self._exec(node.body)
             if isinstance(retval, _Return):
                 return retval
-            elif retval is _break_sentinel:
+            elif isinstance(retval, _Break):
                 break
-            elif retval is _continue_sentinel:
+            elif isinstance(retval, _Continue):
                 continue
         else:
             return self._exec(node.orelse)
@@ -638,9 +646,9 @@ class DraconicInterpreter(SimpleInterpreter):
             retval = self._exec(node.body)
             if isinstance(retval, _Return):
                 return retval
-            elif retval is _break_sentinel:
+            elif isinstance(retval, _Break):
                 break
-            elif retval is _continue_sentinel:
+            elif isinstance(retval, _Continue):
                 continue
         else:
             return self._exec(node.orelse)
@@ -894,13 +902,8 @@ class DraconicInterpreter(SimpleInterpreter):
     def _exec_function(self, __functiondef: _Function, /, *args, **kwargs):
         with self._function_call_context(__functiondef, *args, **kwargs):
             retval = self._exec(__functiondef._node.body)
-            if retval is _break_sentinel or retval is _continue_sentinel:
-                raise DraconicSyntaxError(
-                    SyntaxError(
-                        "Loop control outside loop",
-                        ("<string>", 1, 1, __functiondef._node.body)
-                    )
-                )
+            if isinstance(retval, (_Break, _Continue)):
+                raise DraconicSyntaxError.from_node(retval.node, msg="Loop control outside loop", expr=self._expr)
             if isinstance(retval, _Return):
                 return retval.value
 

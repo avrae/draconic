@@ -1,4 +1,5 @@
 import abc
+import ast
 
 from .versions import PY_310
 
@@ -25,6 +26,8 @@ __all__ = (
 class DraconicException(Exception):
     """Base exception for all exceptions in this library."""
 
+    __drac_context__: str = None
+
     def __init__(self, msg):
         super().__init__(msg)
         self.msg = msg
@@ -33,17 +36,27 @@ class DraconicException(Exception):
 class DraconicSyntaxError(DraconicException):
     """Bad syntax."""
 
-    def __init__(self, original: SyntaxError):
+    def __init__(self, original: SyntaxError, expr):
         super().__init__(original.msg)
         self.lineno = original.lineno
         self.offset = original.offset
         self.end_lineno = None
         self.end_offset = None
-        self.expr = original.text
+        self.expr = expr
 
         if PY_310:
             self.end_lineno = original.end_lineno
             self.end_offset = original.end_offset
+
+    @classmethod
+    def from_node(cls, node: ast.AST, msg: str, expr):
+        if PY_310:
+            inner = SyntaxError(
+                msg, ("<string>", node.lineno, node.col_offset + 1, expr, node.end_lineno, node.end_col_offset + 1)
+            )
+        else:
+            inner = SyntaxError(msg, ("<string>", node.lineno, node.col_offset + 1, expr))
+        return cls(inner, expr)
 
 
 class InvalidExpression(DraconicException):
@@ -124,7 +137,7 @@ class NestedException(WrappedException):
 
     def __init__(self, msg, node, expr, last_exc):
         super().__init__(msg, node, expr)
-        self.last_exc = last_exc  # used for tracebacking
+        self.last_exc = last_exc  # type: DraconicException  # used for tracebacking
         # keep a reference to the end of the chain for easy comparison
         if isinstance(last_exc, WrappedException):
             self.original = last_exc.original
