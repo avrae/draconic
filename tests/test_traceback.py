@@ -19,7 +19,7 @@ def tb_compare(result, expected):
     if PY_310:
         assert result == expected
     else:
-        assert result == re.sub("^+", "^", expected)
+        assert result == re.sub(r"\^+", "^", expected)
 
 
 # ==== tests ====
