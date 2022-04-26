@@ -15,11 +15,11 @@ def ex_with_exc(i, expr):
 
 
 def tb_compare(result, expected):
-    # prior to python 3.10, we didn't have the end_col info
+    # prior to python 3.10, we didn't have the end_col info in syntax errors
     if PY_310:
         assert result == expected
     else:
-        assert result == re.sub(r"\^+", "^", expected)
+        assert re.sub(r"\^+", "^", result) == re.sub(r"\^+", "^", expected)
 
 
 # ==== tests ====
