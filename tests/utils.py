@@ -3,7 +3,7 @@ import contextlib
 import pytest
 
 from draconic import DraconicConfig
-from draconic.exceptions import AnnotatedException, NestedException
+from draconic.exceptions import AnnotatedException, WrappedException
 from draconic.helpers import OperatorMixin
 
 
@@ -19,13 +19,13 @@ def temp_limits(interpreter: OperatorMixin, **limits):
 @contextlib.contextmanager
 def raises(expected_exception, **kwargs):
     """
-    since we have custom error handling with AnnotatedException and NestedException, we have to wrap pytest.raises()
+    since we have custom error handling with WrappedExceptions, we have to wrap pytest.raises()
     to account for situations where the actual expected exception is deep at the root of some expression chain
     """
     if isinstance(expected_exception, tuple):
-        inner_expected = (*expected_exception, AnnotatedException, NestedException)
+        inner_expected = (*expected_exception, WrappedException)
     else:
-        inner_expected = (expected_exception, AnnotatedException, NestedException)
+        inner_expected = (expected_exception, WrappedException)
 
     with pytest.raises(inner_expected, **kwargs) as exc_info:
         yield
@@ -36,8 +36,5 @@ def raises(expected_exception, **kwargs):
     if issubclass(exc_info.type, expected_exception):
         return
     # the exception we care about is deeply nested or wrapped
-    if (
-        isinstance(exc_info.value, (AnnotatedException, NestedException))
-        and expected_exception is not AnnotatedException
-    ):
+    if isinstance(exc_info.value, WrappedException) and expected_exception is not AnnotatedException:
         assert isinstance(exc_info.value.original, expected_exception)

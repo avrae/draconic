@@ -1,3 +1,5 @@
+import abc
+
 from .versions import PY_310
 
 __all__ = (
@@ -12,6 +14,7 @@ __all__ = (
     "IterableTooLong",
     "TooManyStatements",
     "TooMuchRecursion",
+    "WrappedException",
     "AnnotatedException",
     "NestedException",
     "_PostponedRaise",
@@ -102,7 +105,13 @@ class TooMuchRecursion(LimitException):
     pass
 
 
-class AnnotatedException(InvalidExpression):
+class WrappedException(InvalidExpression, abc.ABC):
+    """abstract base exception for a lib exception that wraps some other exception"""
+
+    original: BaseException
+
+
+class AnnotatedException(WrappedException):
     """A wrapper for another exception to handle lineno info."""
 
     def __init__(self, original, node, expr):
@@ -110,14 +119,14 @@ class AnnotatedException(InvalidExpression):
         self.original = original
 
 
-class NestedException(InvalidExpression):
+class NestedException(WrappedException):
     """An exception occurred in a user-defined function call."""
 
     def __init__(self, msg, node, expr, last_exc):
         super().__init__(msg, node, expr)
         self.last_exc = last_exc  # used for tracebacking
         # keep a reference to the end of the chain for easy comparison
-        if isinstance(last_exc, (NestedException, AnnotatedException)):
+        if isinstance(last_exc, WrappedException):
             self.original = last_exc.original
         else:
             self.original = last_exc
