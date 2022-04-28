@@ -815,8 +815,11 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # executions
     def _eval_call(self, node):
+        func = self._eval(node.func)
+        args = tuple(self._eval(a) for a in node.args)
+        kwargs = dict(self._eval(k) for k in node.keywords)
         try:
-            return super()._eval_call(node)
+            return func(*args, **kwargs)
         except DraconicException as e:
             raise NestedException(e.msg, node, self._expr, last_exc=e) from e
 
