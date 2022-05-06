@@ -29,10 +29,27 @@ def e(i):
     return inner
 
 
-@pytest.fixture()
-def ex(i):
+# to really test functions, we parameterize every test with a bare expression and also with it wrapped in a function
+# and lambda
+def _ex_impl_bare(i, expr):
+    return i.execute(expr)
+
+
+def _ex_impl_func(i, expr):
+    func_expr = (
+        f"def PYTEST_IMPL_EX():\n"
+        f"{textwrap.indent(expr, '    ')}\n"
+        f"return PYTEST_IMPL_EX()"
+    )
+    return i.execute(func_expr)
+
+
+@pytest.fixture(params=[_ex_impl_bare, _ex_impl_func], ids=["bare", "wrapped_func"])
+def ex(i, request):
+    impl = request.param
+
     def inner(expr):
         i.out__ = []
-        return i.execute(textwrap.dedent(expr))
+        return impl(i, textwrap.dedent(expr))
 
     return inner

@@ -33,7 +33,7 @@ jobs:
       - name: Test with pytest
         run: |
           pip install -r tests/requirements.txt
-          pytest --cov=./ --cov-report=xml --cov-config=.coveragerc
+          pytest --cov=draconic --cov-report=xml --cov-config=.coveragerc
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1

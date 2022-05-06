@@ -18,7 +18,7 @@ class DraconicConfig:
     def __init__(
         self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
         max_power=1000, disallow_prefixes=None, disallow_methods=None,
-        default_names=None, builtins_extend_default=True, max_int_size=64
+        default_names=None, builtins_extend_default=True, max_int_size=64, max_recursion_depth=50
     ):
         """
         Configuration object for the Draconic interpreter.
@@ -33,7 +33,9 @@ class DraconicConfig:
         :param dict default_names: A dict of str: Any - default names in the runtime
         :param bool builtins_extend_default: If False, ``builtins`` to the interpreter overrides default names
         :param int max_int_size: The maximum allowed size of integers (-2^(pow-1) to 2^(pow-1)-1). Default 64.
-        Integers can technically reach up to double this size before size check. *Not* the max value!
+                                 Integers can technically reach up to double this size before size check.
+                                 *Not* the max value!
+        :param int max_recursion_depth: The maximum allowed recursion depth.
         """
         if disallow_prefixes is None:
             disallow_prefixes = DISALLOW_PREFIXES
@@ -51,6 +53,7 @@ class DraconicConfig:
         self.disallow_prefixes = disallow_prefixes
         self.disallow_methods = disallow_methods
         self.builtins_extend_default = builtins_extend_default
+        self.max_recursion_depth = max_recursion_depth
 
         # types
         self._list = safe_list(self)
