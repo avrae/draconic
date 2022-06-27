@@ -51,7 +51,9 @@ def approx_len_of(obj, visited=None):
 # each function is a function that returns a class based on Draconic config
 # ... look, it works
 def safe_list(config):
-    class SafeList(UserList):  # extends UserList so that [x] * y returns a SafeList, not a list
+    # the additional subclass of list makes isinstance checks against list pass
+    # it's a little hacky, but it shouldn't have any side effects
+    class SafeList(UserList, list):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.__approx_len__ = approx_len_of(self)
