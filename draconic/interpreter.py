@@ -280,10 +280,11 @@ class _Continue:
 
 
 class _Return:
-    __slots__ = ("value",)
+    __slots__ = ("value", "node")
 
-    def __init__(self, retval):
+    def __init__(self, retval, node: ast.Return):
         self.value = retval
+        self.node = node
 
 
 class _Function:
@@ -428,6 +429,29 @@ class DraconicInterpreter(SimpleInterpreter):
             raise DraconicSyntaxError.from_node(retval.node, msg="Loop control outside loop", expr=self._expr)
         if isinstance(retval, _Return):
             return retval.value
+
+    def execute_module(self, expr: str, module_name="<module>"):
+        """
+        Executes the expression as if it was a module.
+        This is similar to *execute* except:
+        - it doesn't allow bare returns
+        - it doesn't call preflight
+        - it saves the previously running expression
+        - it sets the exception context
+        """
+        old_expr = self._expr
+        try:
+            expr = self.parse(expr)
+            retval = self._exec(expr)
+            if isinstance(retval, (_Break, _Continue)):
+                raise DraconicSyntaxError.from_node(retval.node, msg="Loop control outside loop", expr=self._expr)
+            if isinstance(retval, _Return):
+                raise DraconicSyntaxError.from_node(retval.node, msg="'return' outside function", expr=self._expr)
+        except DraconicException as e:
+            e.__drac_context__ = module_name
+            raise
+        finally:
+            self._expr = old_expr
 
     def _preflight(self):
         self._num_stmts = 0
@@ -611,7 +635,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== execution =====
     def _exec_return(self, node):
-        return _Return(self._eval(node.value))
+        return _Return(self._eval(node.value), node)
 
     def _exec_if(self, node):
         test = self._eval(node.test)
