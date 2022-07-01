@@ -232,23 +232,29 @@ def test_return_for(ex):
 
 
 # outside
-def test_break_outside(e, ex):
+def test_break_outside(e, ex, exm):
     with utils.raises(DraconicSyntaxError):
         ex("break")
 
     with utils.raises(DraconicSyntaxError):
         e("break")
 
+    with utils.raises(DraconicSyntaxError):
+        exm("break")
 
-def test_continue_outside(e, ex):
+
+def test_continue_outside(e, ex, exm):
     with utils.raises(DraconicSyntaxError):
         ex("continue")
 
     with utils.raises(DraconicSyntaxError):
         e("continue")
 
+    with utils.raises(DraconicSyntaxError):
+        exm("continue")
 
-def test_return_outside(e, ex):
+
+def test_return_outside(e, ex, exm):
     expr = """
     return 1
     return 2
@@ -256,3 +262,6 @@ def test_return_outside(e, ex):
     """
     assert ex(expr) == 1
     assert e("return 1") == 1
+
+    with utils.raises(DraconicSyntaxError):
+        exm("return 1")
