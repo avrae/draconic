@@ -16,14 +16,15 @@ def i():
     def foo(v):
         inter.out__.append(v)
 
-    inter.builtins['print'] = foo
-    inter.builtins['range'] = range
+    inter.builtins["print"] = foo
+    inter.builtins["range"] = range
     return inter
 
 
 @pytest.fixture()
 def e(i):
     """eval"""
+
     def inner(expr):
         return i.eval(expr)
 
@@ -37,11 +38,13 @@ def _ex_impl_bare(i, expr):
 
 
 def _ex_impl_func(i, expr):
+    # fmt: off
     func_expr = (
         f"def PYTEST_IMPL_EX():\n"
         f"{textwrap.indent(expr, '    ')}\n"
         f"return PYTEST_IMPL_EX()"
     )
+    # fmt: on
     return i.execute(func_expr)
 
 
@@ -60,6 +63,7 @@ def ex(i, request):
 @pytest.fixture()
 def exm(i):
     """execute module"""
+
     def inner(expr):
         return i.execute_module(expr)
 

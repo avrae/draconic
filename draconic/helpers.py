@@ -8,17 +8,26 @@ from .types import *
 __all__ = ("DraconicConfig", "OperatorMixin", "zip_star")
 
 # ===== config =====
-DISALLOW_PREFIXES = ['_', 'func_']
-DISALLOW_METHODS = ['format', 'format_map', 'mro']
+DISALLOW_PREFIXES = ["_", "func_"]
+DISALLOW_METHODS = ["format", "format_map", "mro"]
 
 
 class DraconicConfig:
     """A configuration object to pass into the Draconic interpreter."""
 
     def __init__(
-        self, max_const_len=200000, max_loops=10000, max_statements=100000, max_power_base=1000000,
-        max_power=1000, disallow_prefixes=None, disallow_methods=None,
-        default_names=None, builtins_extend_default=True, max_int_size=64, max_recursion_depth=50
+        self,
+        max_const_len=200000,
+        max_loops=10000,
+        max_statements=100000,
+        max_power_base=1000000,
+        max_power=1000,
+        disallow_prefixes=None,
+        disallow_methods=None,
+        default_names=None,
+        builtins_extend_default=True,
+        max_int_size=64,
+        max_recursion_depth=50,
     ):
         """
         Configuration object for the Draconic interpreter.
@@ -84,10 +93,18 @@ class DraconicConfig:
 
     def _default_names(self):
         return {
-            "True": True, "False": False, "None": None,
+            "True": True,
+            "False": False,
+            "None": None,
             # functions
-            "bool": bool, "int": int, "float": float, "str": self.str, "tuple": tuple,
-            "dict": self.dict, "list": self.list, "set": self.set
+            "bool": bool,
+            "int": int,
+            "float": float,
+            "str": self.str,
+            "tuple": tuple,
+            "dict": self.dict,
+            "list": self.list,
+            "set": self.set,
         }
 
 
@@ -137,7 +154,7 @@ class OperatorMixin:
         """Exponent: limit power base and power to prevent CPU-locking computation"""
         if abs(a) > self._config.max_power_base or abs(b) > self._config.max_power:
             _raise_in_context(NumberTooHigh, f"{a} ** {b} is too large of an exponent")
-        result = a ** b
+        result = a**b
         if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
             _raise_in_context(NumberTooHigh, "This exponent would create a number too large")
         return result
@@ -147,9 +164,9 @@ class OperatorMixin:
         # sequences can only be multiplied by ints, so this is safe
         self._check_binop_operands(a, b)
         if isinstance(b, int) and b * approx_len_of(a) > self._config.max_const_len:
-            _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
+            _raise_in_context(IterableTooLong, "Multiplying these two would create something too long")
         if isinstance(a, int) and a * approx_len_of(b) > self._config.max_const_len:
-            _raise_in_context(IterableTooLong, 'Multiplying these two would create something too long')
+            _raise_in_context(IterableTooLong, "Multiplying these two would create something too long")
         result = a * b
         if isinstance(result, int) and (result < self._config.min_int or result > self._config.max_int):
             _raise_in_context(NumberTooHigh, "Multiplying these two would create a number too large")
@@ -215,5 +232,5 @@ def zip_star(a: Sequence, b: Sequence, star_index: int):
     length_difference = len(b) - (len(a) - 1)
 
     yield from zip(a[:star_index], b[:star_index])
-    yield a[star_index], b[star_index:star_index + length_difference]
-    yield from zip(a[star_index + 1:], b[star_index + length_difference:])
+    yield a[star_index], b[star_index : star_index + length_difference]
+    yield from zip(a[star_index + 1 :], b[star_index + length_difference :])

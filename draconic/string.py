@@ -3,9 +3,7 @@ import re
 
 from .exceptions import IterableTooLong, _raise_in_context
 
-__all__ = (
-    'check_format_spec', 'FORMAT_SPEC_RE', 'PRINTF_TEMPLATE_RE', 'JoinProxy', 'TranslateTableProxy'
-)
+__all__ = ("check_format_spec", "FORMAT_SPEC_RE", "PRINTF_TEMPLATE_RE", "JoinProxy", "TranslateTableProxy")
 
 # ==== format spec ====
 # .format()-style
@@ -36,8 +34,8 @@ def check_format_spec(config, format_spec):
         raise ValueError("Invalid format specifier")
 
     precision_len = 0
-    w = match.group('width')
-    p = match.group('precision')
+    w = match.group("width")
+    p = match.group("precision")
     if w:
         precision_len += int(w)
     if p:
