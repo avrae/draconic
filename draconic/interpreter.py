@@ -92,7 +92,7 @@ class SimpleInterpreter(OperatorMixin):
             handler = self.nodes[type(node)]
         except KeyError:
             raise FeatureNotAvailable(
-                "Sorry, {0} is not available in this " "evaluator".format(type(node).__name__), node, self._expr
+                "Sorry, {0} is not available in this evaluator".format(type(node).__name__), node, self._expr
             )
 
         try:

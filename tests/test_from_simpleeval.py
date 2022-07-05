@@ -63,7 +63,7 @@ class TestBasic(DRYTest):
         self.t("None or None", None)
 
         self.s.names = {"out": True, "position": 3}
-        self.t("(out and position <=6 and -10)" " or (out and position > 6 and -5)" " or (not out and 15)", -10)
+        self.t("(out and position <=6 and -10) or (out and position > 6 and -5) or (not out and 15)", -10)
 
     def test_not(self):
         self.t("not False", True)
@@ -367,7 +367,7 @@ class TestTryingToBreakOut(DRYTest):
     def test_builtins_private_access(self):
         # explicit attempt of the exploit from perkinslr
         with self.assertRaises(FeatureNotAvailable):
-            self.t("True.__class__.__class__.__base__.__subclasses__()[-1]" ".__init__.func_globals['sys'].exit(1)", 42)
+            self.t("True.__class__.__class__.__base__.__subclasses__()[-1].__init__.func_globals['sys'].exit(1)", 42)
 
     def test_string_format(self):
         # python has so many ways to break out!
