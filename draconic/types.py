@@ -6,9 +6,7 @@ from .exceptions import *
 from .string import JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
 from .versions import PY_39
 
-__all__ = (
-    'safe_list', 'safe_dict', 'safe_set', 'safe_str', 'approx_len_of'
-)
+__all__ = ("safe_list", "safe_dict", "safe_set", "safe_str", "approx_len_of")
 
 _sentinel = object()
 
@@ -208,6 +206,7 @@ def safe_dict(config):
             self.__approx_len__ -= 1
 
         if PY_39:
+
             def __or__(self, other):
                 if approx_len_of(self) + approx_len_of(other) > config.max_const_len:
                     _raise_in_context(IterableTooLong, "This dict is too large")
@@ -236,7 +235,7 @@ def safe_str(config):
             _raise_in_context(FeatureNotAvailable, "This method is not allowed")
 
         def expandtabs(self, tabsize=8):
-            if self.count('\t') * tabsize > config.max_const_len:
+            if self.count("\t") * tabsize > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().expandtabs(tabsize)
 
@@ -298,21 +297,21 @@ def safe_str(config):
             # validate that the template is safe (no massive widths/precisions)
             i = 0
             for match in PRINTF_TEMPLATE_RE.finditer(self.data):
-                w = match.group('width')
+                w = match.group("width")
                 if w:
-                    if w == '*':
+                    if w == "*":
                         _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
                     else:
                         new_len_bound += int(w)
 
-                p = match.group('precision')
+                p = match.group("precision")
                 if p:
-                    if p == '*':
+                    if p == "*":
                         _raise_in_context(FeatureNotAvailable, "Star precision in printf-style formatting not allowed")
                     else:
                         new_len_bound += int(p)
 
-                mapping_key = match.group('mapping_key')
+                mapping_key = match.group("mapping_key")
                 if mapping_key is not None:  # '%(foo)s %(foo)s'
                     if not values_is_mapping:  # '%(foo)s' % 0
                         raise TypeError("format requires a mapping")
@@ -329,7 +328,7 @@ def safe_str(config):
                 else:  # '%s' % 0
                     new_len_bound += approx_len_of(values)
 
-                if match.group('type') != '%':  # percent literals do not increase index
+                if match.group("type") != "%":  # percent literals do not increase index
                     i += 1
 
                 if new_len_bound > config.max_const_len:

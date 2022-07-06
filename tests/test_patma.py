@@ -9,6 +9,7 @@ pytestmark = pytest.mark.skipif(not PY_310, reason="requires python 3.10")
 
 # many test cases taken from https://docs.python.org/3/whatsnew/3.10.html#pep-634-structural-pattern-matching
 
+
 def test_match_literal(i, ex):
     expr = """
     for status in (400, 418, 403, "foo", []):
@@ -28,7 +29,7 @@ def test_match_literal(i, ex):
         "I'm a teapot",
         "Something's wrong with the internet",
         "Something's wrong with the internet",
-        "Something's wrong with the internet"
+        "Something's wrong with the internet",
     ]
 
     expr = """
@@ -51,7 +52,7 @@ def test_match_literal(i, ex):
         "I'm a teapot",
         "Not allowed",
         "Something's wrong with the internet",
-        "Something's wrong with the internet"
+        "Something's wrong with the internet",
     ]
 
     expr = """
@@ -65,10 +66,7 @@ def test_match_literal(i, ex):
                 print("I'm a teapot")
     """
     ex(expr)
-    assert i.out__ == [
-        "Bad request",
-        "I'm a teapot"
-    ]
+    assert i.out__ == ["Bad request", "I'm a teapot"]
 
 
 def test_literal_variable(i, ex):
@@ -87,13 +85,7 @@ def test_literal_variable(i, ex):
                 print("Not a point")
     """
     ex(expr)
-    assert i.out__ == [
-        "Origin",
-        "Y=1",
-        "X=1",
-        "X=1, Y=1",
-        "Not a point"
-    ]
+    assert i.out__ == ["Origin", "Y=1", "X=1", "X=1, Y=1", "Not a point"]
 
 
 def test_nested_patterns(i, ex):
@@ -123,7 +115,7 @@ def test_nested_patterns(i, ex):
         "The origin is the only point in the list.",
         "Two points on the Y axis at 0, 1 are in the list.",
         "A single point 1, 1 is in the list.",
-        "Something else is found in the list."
+        "Something else is found in the list.",
     ]
 
 
@@ -142,10 +134,7 @@ def test_complex_wildcard(i, ex):
                 print(f"An error {code} occurred.")
     """
     ex(expr)
-    assert i.out__ == [
-        "A warning has been received.",
-        "An error 404 occurred."
-    ]
+    assert i.out__ == ["A warning has been received.", "An error 404 occurred."]
 
 
 def test_guard(i, ex):
@@ -161,7 +150,7 @@ def test_guard(i, ex):
     assert i.out__ == [
         "The point is located on the diagonal Y=X at 0.",
         "Point is not on the diagonal.",
-        "The point is located on the diagonal Y=X at -1."
+        "The point is located on the diagonal Y=X at -1.",
     ]
 
 
@@ -193,7 +182,7 @@ def test_sequence_pattern(i, ex):
         "starts and ends at 0, middle=[1, 2]",
         "starts at 0, middle=[1]",
         "ends at 0, middle=[1]",
-        "starts at 1, we don't care about the rest"
+        "starts at 1, we don't care about the rest",
     ]
 
 
@@ -257,7 +246,7 @@ def test_mapping_pattern(i, ex):
         "zz",
         "playing beep.ogg",
         "Unsupported audio format",
-        "LOG[thing]: {'a': 1, 'foo': ['bar']}"
+        "LOG[thing]: {'a': 1, 'foo': ['bar']}",
     ]
 
 
@@ -292,10 +281,7 @@ def test_match_singleton(i, ex):
                 print(f"failure: {val}")
     """
     ex(expr)
-    assert i.out__ == [
-        "success: success",
-        "failure: failure"
-    ]
+    assert i.out__ == ["success: success", "failure: failure"]
 
 
 def test_match_not_allowed(ex):
@@ -322,11 +308,7 @@ def test_match_as(i, ex):
                 print("I don't know how to go that way.")
     """
     ex(expr)
-    assert i.out__ == [
-        "Going north!",
-        "Going south!",
-        "I don't know how to go that way."
-    ]
+    assert i.out__ == ["Going north!", "Going south!", "I don't know how to go that way."]
 
 
 def test_binding_leaks(i, ex):

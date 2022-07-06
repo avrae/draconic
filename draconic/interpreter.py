@@ -87,13 +87,12 @@ class SimpleInterpreter(OperatorMixin):
         return self._eval(expression)
 
     def _eval(self, node):
-        """ The internal evaluator used on each node in the parsed tree. """
+        """The internal evaluator used on each node in the parsed tree."""
         try:
             handler = self.nodes[type(node)]
         except KeyError:
             raise FeatureNotAvailable(
-                "Sorry, {0} is not available in this "
-                "evaluator".format(type(node).__name__), node, self._expr
+                "Sorry, {0} is not available in this evaluator".format(type(node).__name__), node, self._expr
             )
 
         try:
@@ -130,12 +129,12 @@ class SimpleInterpreter(OperatorMixin):
             raise IterableTooLong(
                 f"String literal in statement is too long ({len(node.s)} > {self._config.max_const_len})",
                 node,
-                self._expr
+                self._expr,
             )
         return self._str(node.s)
 
     def _eval_constant(self, node):
-        if hasattr(node.value, '__len__') and len(node.value) > self._config.max_const_len:
+        if hasattr(node.value, "__len__") and len(node.value) > self._config.max_const_len:
             raise IterableTooLong(
                 f"Literal in statement is too long ({len(node.value)} > {self._config.max_const_len})", node, self._expr
             )
@@ -147,10 +146,7 @@ class SimpleInterpreter(OperatorMixin):
         return self.operators[type(node.op)](self._eval(node.operand))
 
     def _eval_binop(self, node):
-        return self.operators[type(node.op)](
-            self._eval(node.left),
-            self._eval(node.right)
-        )
+        return self.operators[type(node.op)](self._eval(node.left), self._eval(node.right))
 
     def _eval_boolop(self, node):
         vout = False
@@ -178,15 +174,11 @@ class SimpleInterpreter(OperatorMixin):
         return to_return
 
     def _eval_ifexp(self, node):
-        return self._eval(node.body) if self._eval(node.test) \
-            else self._eval(node.orelse)
+        return self._eval(node.body) if self._eval(node.test) else self._eval(node.orelse)
 
     def _eval_call(self, node):
         func = self._eval(node.func)
-        return func(
-            *(self._eval(a) for a in node.args),
-            **dict(self._eval(k) for k in node.keywords)
-        )
+        return func(*(self._eval(a) for a in node.args), **dict(self._eval(k) for k in node.keywords))
 
     def _eval_keyword(self, node):
         return node.arg, self._eval(node.value)
@@ -250,11 +242,10 @@ class SimpleInterpreter(OperatorMixin):
             length += len(val)
             if length > self._config.max_const_len:
                 raise IterableTooLong(
-                    f"f-string in statement is too long ({length} > {self._config.max_const_len})",
-                    node, self._expr
+                    f"f-string in statement is too long ({length} > {self._config.max_const_len})", node, self._expr
                 )
             evaluated_values.append(val)
-        return ''.join(evaluated_values)
+        return "".join(evaluated_values)
 
     def _eval_formattedvalue(self, node):
         if node.format_spec:
@@ -316,7 +307,7 @@ class _Lambda:
         self._interpreter = interpreter
         self._node = lambdadef
         self._outer_scope_names = names_at_def
-        self.__name__ = self._name = '<lambda>'
+        self.__name__ = self._name = "<lambda>"
         self._defining_expr = defining_expr
 
     def __repr__(self):
@@ -366,7 +357,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 ast.Pass: lambda node: None,
                 # functions:
                 ast.FunctionDef: self._eval_functiondef,
-                ast.Lambda: self._eval_lambda
+                ast.Lambda: self._eval_lambda,
             }
         )
 
@@ -395,9 +386,8 @@ class DraconicInterpreter(SimpleInterpreter):
                     ast.MatchMapping: self._patma_match_mapping,
                     ast.MatchStar: self._patma_match_star,
                     # no MatchClass
-
                     ast.MatchAs: self._patma_match_as,
-                    ast.MatchOr: self._patma_match_or
+                    ast.MatchOr: self._patma_match_or,
                 }
             )
 
@@ -519,9 +509,12 @@ class DraconicInterpreter(SimpleInterpreter):
 
     def _do_comprehension(self, comprehension_node, is_dictcomp=False):
         if is_dictcomp:
+
             def do_value(node):
                 return self._eval(node.key), self._eval(node.value)
+
         else:
+
             def do_value(node):
                 return self._eval(node.elt)
 
@@ -530,7 +523,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
         def eval_names_extra(node):
             """
-                Here we hide our extra scope for within this comprehension
+            Here we hide our extra scope for within this comprehension
             """
             if node.id in extra_names:
                 return extra_names[node.id]
@@ -559,7 +552,7 @@ class DraconicInterpreter(SimpleInterpreter):
             for i in self._eval(generator_node.iter):
                 self._loops += 1
                 if self._loops > self._config.max_loops:
-                    raise IterableTooLong('Comprehension generates too many elements', comprehension_node, self._expr)
+                    raise IterableTooLong("Comprehension generates too many elements", comprehension_node, self._expr)
 
                 # set names
                 recurse_targets(generator_node.target, i)
@@ -622,9 +615,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 values = list(iter(values))
             except TypeError:
                 raise DraconicValueError(
-                    f"Cannot unpack non-iterable {type(values).__name__} object",
-                    names,
-                    self._expr
+                    f"Cannot unpack non-iterable {type(values).__name__} object", names, self._expr
                 )
             if not len(names.elts) == len(values):
                 raise DraconicValueError(
@@ -648,7 +639,7 @@ class DraconicInterpreter(SimpleInterpreter):
         for item in self._eval(node.iter):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in for block)', node, self._expr)
+                raise TooManyStatements("Too many loops (in for block)", node, self._expr)
 
             self._assign(node.target, item)
             retval = self._exec(node.body)
@@ -665,7 +656,7 @@ class DraconicInterpreter(SimpleInterpreter):
         while self._eval(node.test):
             self._loops += 1
             if self._loops > self._config.max_loops:
-                raise TooManyStatements('Too many loops (in while block)', node, self._expr)
+                raise TooManyStatements("Too many loops (in while block)", node, self._expr)
 
             retval = self._exec(node.body)
             if isinstance(retval, _Return):
@@ -719,17 +710,10 @@ class DraconicInterpreter(SimpleInterpreter):
         if not isinstance(subject, Sequence) or isinstance(subject, (str, bytes)):
             return None
 
-        match_star_idxs = [
-            idx
-            for idx, pattern in enumerate(node.patterns)
-            if isinstance(pattern, ast.MatchStar)
-        ]
+        match_star_idxs = [idx for idx, pattern in enumerate(node.patterns) if isinstance(pattern, ast.MatchStar)]
         if len(match_star_idxs) > 1:
             # multiple starred names
-            raise DraconicValueError(
-                f"multiple starred names in sequence pattern",
-                node, self._expr
-            )
+            raise DraconicValueError(f"multiple starred names in sequence pattern", node, self._expr)
         elif match_star_idxs:
             # one starred name
             if not len(node.patterns) <= len(subject) + 1:
@@ -755,7 +739,8 @@ class DraconicInterpreter(SimpleInterpreter):
             if bound_names.intersection(match):
                 raise DraconicValueError(
                     f"multiple assignment to names {sorted(bound_names.intersection(match))} in sequence pattern",
-                    node, self._expr
+                    node,
+                    self._expr,
                 )
             bindings.update(match)
             bound_names.update(match)
@@ -785,7 +770,8 @@ class DraconicInterpreter(SimpleInterpreter):
             if bound_names.intersection(match):
                 raise DraconicValueError(
                     f"multiple assignment to names {sorted(bound_names.intersection(match))} in mapping pattern",
-                    node, self._expr
+                    node,
+                    self._expr,
                 )
             bindings.update(match)
             bound_names.update(match)
@@ -794,8 +780,7 @@ class DraconicInterpreter(SimpleInterpreter):
         if node.rest is not None:
             if node.rest in bound_names:
                 raise DraconicValueError(
-                    f"multiple assignment to name {node.rest!r} in mapping pattern",
-                    node, self._expr
+                    f"multiple assignment to name {node.rest!r} in mapping pattern", node, self._expr
                 )
             bindings[node.rest] = {k: v for k, v in subject.items() if k not in bound_keys}
 
@@ -853,7 +838,7 @@ class DraconicInterpreter(SimpleInterpreter):
         # check limits
         self._depth += 1
         if self._depth > self._config.max_recursion_depth:
-            _raise_in_context(TooMuchRecursion, 'Maximum recursion depth exceeded')
+            _raise_in_context(TooMuchRecursion, "Maximum recursion depth exceeded")
         # store current names and expression
         old_names = self._names
         old_expr = self._expr
