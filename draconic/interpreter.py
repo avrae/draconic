@@ -1,6 +1,8 @@
+import abc
 import ast
 import contextlib
 from collections.abc import Mapping, Sequence
+from functools import cached_property
 
 from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin, zip_star
@@ -278,15 +280,34 @@ class _Return:
         self.node = node
 
 
-class _Function:
+class _Callable(abc.ABC):
+    """ABC for functions and lambdas"""
+
+    def __init__(self, interpreter, node, names_at_def, defining_expr):
+        self._interpreter = interpreter
+        self._node = node
+        self._outer_scope_names = names_at_def
+        self._defining_expr = defining_expr
+
+    # faux introspection props since __dunders__ aren't accessible
+    @property
+    def name(self):
+        return self.__name__
+
+    @cached_property
+    def doc(self):
+        return ast.get_docstring(self._node)
+
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class _Function(_Callable):
     """A wrapper class around an ast.FunctionDef."""
 
     def __init__(self, interpreter, functiondef, names_at_def, defining_expr):
-        self._interpreter = interpreter
-        self._node = functiondef
-        self._outer_scope_names = names_at_def
+        super().__init__(interpreter, functiondef, names_at_def, defining_expr)
         self.__name__ = self._name = functiondef.name
-        self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function {self._name}>"
@@ -300,18 +321,19 @@ class _Function:
             raise
 
 
-class _Lambda:
+class _Lambda(_Callable):
     """A wrapper class around an ast.Lambda."""
 
     def __init__(self, interpreter, lambdadef, names_at_def, defining_expr):
-        self._interpreter = interpreter
-        self._node = lambdadef
-        self._outer_scope_names = names_at_def
+        super().__init__(interpreter, lambdadef, names_at_def, defining_expr)
         self.__name__ = self._name = "<lambda>"
-        self._defining_expr = defining_expr
 
     def __repr__(self):
         return f"<Function <lambda>>"
+
+    @property
+    def doc(self):
+        return None
 
     def __call__(self, *args, **kwargs):
         try:
