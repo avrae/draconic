@@ -100,3 +100,32 @@ SyntaxError: alternative patterns bind different names
 ...         print(one)
 1
 ```
+
+### Function Dunder Attributes
+
+As access to `__dunder__` attributes is not allowed in Draconic, the `function.__name__` and `function.__doc__` 
+attributes are exposed as `function.name` and `function.doc` instead.
+
+**Python**
+
+```pycon
+>>> def foo():
+...     """I am foo"""
+...     pass
+>>> print(foo.__name__)
+foo
+>>> print(foo.__doc__)
+I am foo
+```
+
+**Draconic**
+
+```pycon
+>>> def foo():
+...     """I am foo"""
+...     pass
+>>> print(foo.name)
+foo
+>>> print(foo.doc)
+I am foo
+```

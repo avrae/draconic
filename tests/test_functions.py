@@ -460,3 +460,27 @@ def test_shadow_assignment(i, ex):
     """
     with utils.raises(DraconicValueError):
         ex(expr)
+
+
+def test_introspection(i, ex):
+    expr = """
+    def foo():
+        '''i am foo'''
+        pass
+        
+    def bar():
+        pass
+        
+    bletch = lambda: None
+    foo2 = foo
+    
+    for callable in (foo, bar, bletch, foo2):
+        print((callable.name, callable.doc))
+    """
+    ex(expr)
+    assert i.out__ == [
+        ("foo", "i am foo"),
+        ("bar", None),
+        ("<lambda>", None),
+        ("foo", "i am foo"),
+    ]
