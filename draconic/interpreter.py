@@ -366,6 +366,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 ast.SetComp: self._eval_setcomp,
                 ast.DictComp: self._eval_dictcomp,
                 ast.GeneratorExp: self._eval_generatorexp,
+                ast.Starred: self._eval_starred,  # foo(*iterable), [*iterable], etc.
                 # assignments:
                 ast.Assign: self._eval_assign,
                 ast.AugAssign: self._eval_augassign,
@@ -390,6 +391,7 @@ class DraconicInterpreter(SimpleInterpreter):
             ast.List: self._assign_unpack,
             ast.Subscript: self._assign_subscript,
             # no assigning to attributes
+            ast.Starred: self._assign_starred,  # a, *b = [x, y, z]
         }
 
         self.patma_nodes = {}
@@ -509,13 +511,13 @@ class DraconicInterpreter(SimpleInterpreter):
         return self._dict((self._eval(k), self._eval(v)) for (k, v) in zip(node.keys, node.values))
 
     def _eval_tuple(self, node):
-        return tuple(self._eval(x) for x in node.elts)
+        return tuple(self._starred_unwrap(node.elts))
 
     def _eval_list(self, node):
-        return self._list(self._eval(x) for x in node.elts)
+        return self._list(self._starred_unwrap(node.elts))
 
     def _eval_set(self, node):
-        return self._set(self._eval(x) for x in node.elts)
+        return self._set(self._starred_unwrap(node.elts))
 
     def _eval_listcomp(self, node):
         return self._list(self._do_comprehension(node))
@@ -598,6 +600,23 @@ class DraconicInterpreter(SimpleInterpreter):
         finally:
             self.nodes.update({ast.Name: previous_name_evaller})
 
+    def _eval_starred(self, node):
+        raise DraconicSyntaxError.from_node(node, "can't use starred expression here", self._expr)
+
+    def _starred_unwrap(self, nodes):
+        for node in nodes:
+            if type(node) is ast.Starred:
+                evalue = self._eval(node.value)
+                try:
+                    iterable = iter(evalue)
+                    sentinel = object()
+                    while (retval := next(iterable, sentinel)) is not sentinel:
+                        yield retval
+                except TypeError:
+                    raise TypeError(f"Value after * must be iterable, got {type(evalue).__name__}")
+            else:
+                yield self._eval(node)
+
     # ===== assignments =====
     def _eval_assign(self, node):
         value = self._eval(node.value)
@@ -645,12 +664,49 @@ class DraconicInterpreter(SimpleInterpreter):
                 raise DraconicValueError(
                     f"Cannot unpack non-iterable {type(values).__name__} object", names, self._expr
                 )
-            if not len(names.elts) == len(values):
-                raise DraconicValueError(
-                    f"Unequal unpack: {len(names.elts)} names, {len(values)} values", names, self._expr
-                )
-            for t, v in zip(names.elts, values):
-                self._assign_unpack(t, v)
+
+            stars = (i for i in names.elts if type(i) is ast.Starred)
+            starred = next(stars, None)
+
+            if starred is None:
+                if len(names.elts) > len(values):
+                    raise DraconicValueError(
+                        f"not enough values to unpack (expected {len(names.elts)}, got {len(values)})",
+                        values,
+                        self._expr,
+                    )
+                elif len(names.elts) < len(values):
+                    raise DraconicValueError(
+                        f"too many values to unpack (expected {len(names.elts)}, got {len(values)})",
+                        values,
+                        self._expr,
+                    )
+                for t, v in zip(names.elts, values):
+                    self._assign_unpack(t, v)
+            elif (extra := next(stars, None)) is not None:
+                raise DraconicSyntaxError.from_node(extra, "multiple starred expressions in assignment", self._expr)
+            else:
+                if len(values) < (len(names.elts) - 1):
+                    raise DraconicValueError(
+                        f"not enough values to unpack (expected at least {len(names.elts) - 1}, got {len(values)})",
+                        values,
+                        self._expr,
+                    )
+                for t, v in zip(names.elts, values):
+                    if t is starred:
+                        break
+                    values.remove(v)
+                    self._assign_unpack(t, v)
+
+                for t, v in zip(reversed(names.elts), reversed(values)):
+                    if t is starred:
+                        break
+                    values.remove(v)
+                    self._assign_unpack(t, v)
+                self._assign_unpack(starred, values)
+
+    def _assign_starred(self, name, value):
+        self._assign_name(name.value, value)
 
     # ===== execution =====
     def _exec_return(self, node):
@@ -854,7 +910,7 @@ class DraconicInterpreter(SimpleInterpreter):
     # executions
     def _eval_call(self, node):
         func = self._eval(node.func)
-        args = tuple(self._eval(a) for a in node.args)
+        args = tuple(self._starred_unwrap(node.args))
         kwargs = dict(self._eval(k) for k in node.keywords)
         try:
             return func(*args, **kwargs)
