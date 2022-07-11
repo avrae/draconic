@@ -508,7 +508,7 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== compound types =====
     def _eval_dict(self, node):
-        return self._dict((self._eval(k), self._eval(v)) for (k, v) in zip(node.keys, node.values))
+        return self._dict(self._starred_keyword_unwrap(zip(node.keys, node.values)))
 
     def _eval_tuple(self, node):
         return tuple(self._starred_unwrap(node.elts))
@@ -616,6 +616,20 @@ class DraconicInterpreter(SimpleInterpreter):
                     raise TypeError(f"Value after * must be iterable, got {type(evalue).__name__}")
             else:
                 yield self._eval(node)
+
+    def _starred_keyword_unwrap(self, items):
+        for key, value in items:
+            evalue = self._eval(value)
+            if key is None:
+                if isinstance(evalue, Mapping):
+                    iterable = iter(evalue.items())
+                    sentinel = object()
+                    while (retval := next(iterable, sentinel)) is not sentinel:
+                        yield retval
+                else:
+                    raise TypeError(f"argument after ** must be a mapping, got {type(value).__name__}")
+            else:
+                yield self._eval(key) if isinstance(key, ast.AST) else key, evalue
 
     # ===== assignments =====
     def _eval_assign(self, node):
@@ -911,7 +925,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _eval_call(self, node):
         func = self._eval(node.func)
         args = tuple(self._starred_unwrap(node.args))
-        kwargs = dict(self._eval(k) for k in node.keywords)
+        kwargs = dict(self._starred_keyword_unwrap((k.arg, k.value) for k in node.keywords))
         try:
             return func(*args, **kwargs)
         except DraconicException as e:
