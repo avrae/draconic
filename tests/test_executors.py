@@ -265,3 +265,7 @@ def test_return_outside(e, ex, exm):
 
     with utils.raises(DraconicSyntaxError):
         exm("return 1")
+
+
+def test_bare_return(ex):
+    assert ex("return") is None

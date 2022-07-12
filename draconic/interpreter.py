@@ -648,7 +648,8 @@ class DraconicInterpreter(SimpleInterpreter):
 
     # ===== execution =====
     def _exec_return(self, node):
-        return _Return(self._eval(node.value), node)
+        retval = self._eval(node.value) if node.value is not None else None
+        return _Return(retval, node)
 
     def _exec_if(self, node):
         test = self._eval(node.test)
