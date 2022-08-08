@@ -181,3 +181,130 @@ def test_excepting_limits(i, ex):
                     pass
                 """
             )
+
+
+def test_incorrect_except_types(ex):
+    expr = """
+    try:
+        1/0
+    except None:
+        pass
+    """
+    with utils.raises(FeatureNotAvailable):
+        ex(expr)
+
+    expr = """
+    try:
+        1/0
+    except ["a", "b"]:
+        pass
+    """
+    with utils.raises(FeatureNotAvailable):
+        ex(expr)
+
+    expr = """
+    try:
+        1/0
+    except ("Exception", None):
+        pass
+    """
+    with utils.raises(FeatureNotAvailable):
+        ex(expr)
+
+
+def test_try_except_flow_order(ex):
+    expr = """
+    try:
+        return 0
+    except:
+        return 1
+    else:
+        return 2
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
+
+    expr = """
+    try:
+        return 0
+    except:
+        return 1
+    else:
+        return 2
+    """
+    assert ex(expr) == 0
+
+    expr = """
+    try:
+        return 0
+    except:
+        return 1
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
+
+    expr = """
+    try:
+        return 0
+    except:
+        return 1
+    """
+    assert ex(expr) == 0
+
+    expr = """
+    try:
+        return 0
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
+
+    expr = """
+    try:
+        return 1/0
+    except:
+        return 1
+    else:
+        return 2
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
+
+    expr = """
+    try:
+        return 1/0
+    except:
+        return 1
+    else:
+        return 2
+    """
+    assert ex(expr) == 1
+
+    expr = """
+    try:
+        return 1/0
+    except:
+        return 1
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
+
+    expr = """
+    try:
+        return 1/0
+    except:
+        return 1
+    """
+    assert ex(expr) == 1
+
+    expr = """
+    try:
+        return 1/0
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
