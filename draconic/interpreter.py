@@ -380,6 +380,8 @@ class DraconicInterpreter(SimpleInterpreter):
                 # functions:
                 ast.FunctionDef: self._eval_functiondef,
                 ast.Lambda: self._eval_lambda,
+                # try/except:
+                ast.Try: self._exec_try,
             }
         )
 
@@ -946,3 +948,57 @@ class DraconicInterpreter(SimpleInterpreter):
     def _exec_lambda(self, __lambdadef: _Lambda, /, *args, **kwargs):
         with self._function_call_context(__lambdadef, *args, **kwargs):
             return self._eval(__lambdadef._node.body)
+
+    # ===== try/except =====
+    def _exec_try(self, node: ast.Try):
+        try:
+            retval = self._exec(node.body)
+            if isinstance(retval, (_Return, _Continue, _Break)):
+                return retval
+        except Exception as exc:
+            if isinstance(exc, WrappedException):
+                exc = exc.original
+            # draconic diff: limit errors cannot be caught
+            if isinstance(exc, LimitException):
+                raise
+            # enter into the except handlers
+            for handler in node.handlers:
+                if self._except_handler_matches(handler, exc):
+                    retval = self._except_handler(handler)
+                    if isinstance(retval, (_Return, _Continue, _Break)):
+                        return retval
+                    break
+            else:
+                raise
+        else:
+            retval = self._exec(node.orelse)
+            if isinstance(retval, (_Return, _Continue, _Break)):
+                return retval
+        finally:
+            retval = self._exec(node.finalbody)
+            if isinstance(retval, (_Return, _Continue, _Break)):
+                return retval
+
+    def _except_handler_matches(self, node: ast.ExceptHandler, exc: BaseException) -> bool:
+        # draconic diff: exception handlers must be string literals, tuple[str] literals, or bare
+        if node.type is None:
+            return True
+        if isinstance(node.type, ast.Str):
+            return type(exc).__name__ == self._eval_str(node.type)
+        elif isinstance(node.type, ast.Tuple):
+            if not all(isinstance(item, ast.Str) for item in node.type.elts):
+                raise FeatureNotAvailable(
+                    "'except' clause expressions must be string literals or tuple of string literals", node, self._expr
+                )
+            return type(exc).__name__ in self._eval_tuple(node.type)
+        else:
+            raise FeatureNotAvailable(
+                "'except' clause expressions must be string literals or tuple of string literals", node, self._expr
+            )
+
+    def _except_handler(self, node: ast.ExceptHandler):
+        # draconic diff: 'as X' clause not allowed
+        if node.name is not None:
+            raise FeatureNotAvailable("'except ... as X' is not available in this interpreter", node, self._expr)
+        # run body
+        return self._exec(node.body)
