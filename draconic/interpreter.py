@@ -587,7 +587,7 @@ class DraconicInterpreter(SimpleInterpreter):
                     else:
                         # emit values
                         value = do_value(comprehension_node)
-                        total_len += sum([approx_len_of(val) for val in value]) if is_dictcomp else approx_len_of(value)
+                        total_len += sum(approx_len_of(val) for val in value) if is_dictcomp else approx_len_of(value)
                         total_len += 1
                         if total_len > self._config.max_const_len:
                             raise IterableTooLong("Comprehension generates too much", comprehension_node, self._expr)
