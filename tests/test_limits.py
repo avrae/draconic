@@ -132,8 +132,8 @@ def test_set(i, e):
 
 def test_dict(i, e):
     i.builtins["range"] = range
-    e("long = dict((i, i) for i in range(1000))")
-    e("long2 = {i: i for i in range(1000, 2000)}")
+    e("long = {f'{i:03}': 'a' for i in range(200)}")
+    e("long2 = dict((f'{i:03}', 'a') for i in range(200, 342))")
     e("long_copy = long.copy()")
 
     with utils.raises(IterableTooLong):
@@ -151,7 +151,12 @@ def test_dict(i, e):
 
         with utils.raises(IterableTooLong):
             e("long_copy |= long2")
-
+            
+def test_comprehension(i, e):
+    # check that you can't bypass cont limits with comprehension
+    with utils.raises(IterableTooLong):
+        i.builtins["range"] = range
+        e("[f'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa{x}' for x in range(1000)]")
 
 def test_that_it_still_works_right(i, e):
     e("l = [1, 2]")

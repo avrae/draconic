@@ -8,6 +8,7 @@ from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
 from .versions import PY_310
+from .types import approx_len_of
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -564,7 +565,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 for t, v in zip(target.elts, value):
                     recurse_targets(t, v)
 
-        def do_generator(gi=0):
+        def do_generator(gi=0, total_len=0):
             """
             For each generator, set the names used in the final emitted value/the next generator.
             Only the final generator (gi = len(comprehension_node.generator)-1) should emit the final values,
@@ -582,10 +583,15 @@ class DraconicInterpreter(SimpleInterpreter):
                 if all(self._eval(iff) for iff in generator_node.ifs):
                     if len(comprehension_node.generators) > gi + 1:
                         # next generator
-                        yield from do_generator(gi + 1)  # bubble up emitted values
+                        yield from do_generator(gi + 1, total_len)  # bubble up emitted values
                     else:
                         # emit values
-                        yield do_value(comprehension_node)
+                        value = do_value(comprehension_node)
+                        total_len += sum([approx_len_of(val) for val in value]) if is_dictcomp else approx_len_of(value)
+                        total_len += 1
+                        if total_len > self._config.max_const_len:
+                            raise IterableTooLong("Comprehension generates too much", comprehension_node, self._expr)
+                        yield value
 
         try:
             yield from do_generator()
