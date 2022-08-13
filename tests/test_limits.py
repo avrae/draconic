@@ -152,6 +152,12 @@ def test_dict(i, e):
         with utils.raises(IterableTooLong):
             e("long_copy |= long2")
             
+    with utils.raises(IterableTooLong):
+        e("toolong = {f'{i:03}': 'a' for i in range(201)}")
+        
+    with utils.raises(IterableTooLong):
+        e("toolong2 = dict((f'{i:03}', 'a') for i in range(200, 343))")
+            
 def test_comprehension(i, e):
     # check that you can't bypass cont limits with comprehension
     with utils.raises(IterableTooLong):
