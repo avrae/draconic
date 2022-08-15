@@ -308,3 +308,27 @@ def test_try_except_flow_order(ex):
         return 3
     """
     assert ex(expr) == 3
+
+    expr = """
+    try:
+        pass
+    except:
+        pass
+    else:
+        return 2
+    finally:
+        pass
+    """
+    assert ex(expr) == 2
+
+    expr = """
+    try:
+        pass
+    except:
+        pass
+    else:
+        return 2
+    finally:
+        return 3
+    """
+    assert ex(expr) == 3
