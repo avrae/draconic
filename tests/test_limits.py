@@ -71,6 +71,13 @@ def test_list(i, e):
     e("my_list.extend(reallist)")
     assert isinstance(e("my_list"), i._list)
 
+    # check that you can't bypass cont limits with comprehension
+    i.builtins["range"] = range
+    e("[f'{x:03}' for x in range(250)]")
+
+    with utils.raises(IterableTooLong):
+        e("[f'{x:03}' for x in range(251)]")
+
 
 def test_set(i, e):
     i.builtins["range"] = range
@@ -132,8 +139,8 @@ def test_set(i, e):
 
 def test_dict(i, e):
     i.builtins["range"] = range
-    e("long = dict((i, i) for i in range(1000))")
-    e("long2 = {i: i for i in range(1000, 2000)}")
+    e("long = {f'{i:03}': 'a' for i in range(200)}")
+    e("long2 = dict((f'{i:03}', 'a') for i in range(200, 342))")
     e("long_copy = long.copy()")
 
     with utils.raises(IterableTooLong):
@@ -151,6 +158,12 @@ def test_dict(i, e):
 
         with utils.raises(IterableTooLong):
             e("long_copy |= long2")
+
+    with utils.raises(IterableTooLong):
+        e("toolong = {f'{i:03}': 'a' for i in range(201)}")
+
+    with utils.raises(IterableTooLong):
+        e("toolong2 = dict((f'{i:03}', 'a') for i in range(200, 343))")
 
 
 def test_that_it_still_works_right(i, e):
