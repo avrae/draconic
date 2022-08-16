@@ -17,11 +17,11 @@ class DraconicConfig:
 
     def __init__(
         self,
-        max_const_len=200000,
-        max_loops=10000,
-        max_statements=100000,
-        max_power_base=1000000,
-        max_power=1000,
+        max_const_len=200_000,
+        max_loops=10_000,
+        max_statements=100_000,
+        max_power_base=1_000_000,
+        max_power=1_000,
         disallow_prefixes=None,
         disallow_methods=None,
         default_names=None,
