@@ -603,7 +603,9 @@ class DraconicInterpreter(SimpleInterpreter):
     def _eval_starred(self, node):
         raise DraconicSyntaxError.from_node(node, "can't use starred expression here", self._expr)
 
-    def _starred_unwrap(self, nodes):
+    def _starred_unwrap(self, nodes, *, check_len=True):
+        total_len = 0
+
         for node in nodes:
             if type(node) is ast.Starred:
                 evalue = self._eval(node.value)
@@ -611,13 +613,27 @@ class DraconicInterpreter(SimpleInterpreter):
                     iterable = iter(evalue)
                     sentinel = object()
                     while (retval := next(iterable, sentinel)) is not sentinel:
+                        self._loops += 1
+                        if self._loops > self._config.max_loops:
+                            raise IterableTooLong("Unwrapping generates too many elements", nodes, self._expr)
+                        if check_len:
+                            total_len += approx_len_of(retval) + 1
+                            if total_len > self._config.max_const_len:
+                                raise IterableTooLong("Unwrapping generates too much", nodes, self._expr)
                         yield retval
                 except TypeError:
                     raise TypeError(f"Value after * must be iterable, got {type(evalue).__name__}")
             else:
-                yield self._eval(node)
+                retval = self._eval(node)
+                if check_len:
+                    total_len += approx_len_of(retval) + 1
+                    if total_len > self._config.max_const_len:
+                        raise IterableTooLong("Unwrapping generates too much", nodes, self._expr)
+                yield retval
 
-    def _starred_keyword_unwrap(self, items):
+    def _starred_keyword_unwrap(self, items, *, check_len=True):
+        total_len = 0
+
         for key, value in items:
             evalue = self._eval(value)
             if key is None:
@@ -625,11 +641,23 @@ class DraconicInterpreter(SimpleInterpreter):
                     iterable = iter(evalue.items())
                     sentinel = object()
                     while (retval := next(iterable, sentinel)) is not sentinel:
+                        self._loops += 1
+                        if self._loops > self._config.max_loops:
+                            raise IterableTooLong("Unwrapping generates too many elements", items, self._expr)
+                        if check_len:
+                            total_len += sum([approx_len_of(retval) for val in retval]) + 1
+                            if total_len > self._config.max_const_len:
+                                raise IterableTooLong("Unwrapping generates too much", items, self._expr)
                         yield retval
                 else:
                     raise TypeError(f"argument after ** must be a mapping, got {type(value).__name__}")
             else:
-                yield self._eval(key) if isinstance(key, ast.AST) else key, evalue
+                retval = self._eval(key) if isinstance(key, ast.AST) else key, evalue
+                if check_len:
+                    total_len += sum([approx_len_of(retval) for val in retval]) + 1
+                    if total_len > self._config.max_const_len:
+                        raise IterableTooLong("Unwrapping generates too much", items, self._expr)
+                yield retval
 
     # ===== assignments =====
     def _eval_assign(self, node):
@@ -924,8 +952,8 @@ class DraconicInterpreter(SimpleInterpreter):
     # executions
     def _eval_call(self, node):
         func = self._eval(node.func)
-        args = tuple(self._starred_unwrap(node.args))
-        kwargs = dict(self._starred_keyword_unwrap((k.arg, k.value) for k in node.keywords))
+        args = tuple(self._starred_unwrap(node.args, check_len=False))
+        kwargs = dict(self._starred_keyword_unwrap(((k.arg, k.value) for k in node.keywords), check_len=False))
         try:
             return func(*args, **kwargs)
         except DraconicException as e:

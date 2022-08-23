@@ -26,10 +26,6 @@ def test_creating(i, e):
     with utils.raises(IterableTooLong):
         e(f"'{really_long_str}'")
 
-    # lists
-    with utils.raises(FeatureNotAvailable):  # we don't allow this
-        e(f"[*long, *long]")
-
 
 def test_f_string(i, e):
     really_long_str = "foo" * 1000
@@ -62,6 +58,12 @@ def test_list(i, e):
 
     with utils.raises(IterableTooLong):
         e("long.extend(long)")
+
+    with utils.raises(IterableTooLong):
+        e("[1, *long]")
+
+    with utils.raises(IterableTooLong):
+        e("[*long, *long]")
 
     # we should always be operating using safe lists
     i.builtins["reallist"] = [1, 2, 3]
@@ -127,6 +129,12 @@ def test_set(i, e):
     with utils.raises(IterableTooLong):
         e("long.symmetric_difference_update(long2)")
 
+    with utils.raises(IterableTooLong):
+        e("{*long, 1000}")
+
+    with utils.raises(IterableTooLong):
+        e("{*longer}")
+
     # we should always be operating using safe sets
     i.builtins["realset"] = {1, 2, 3}
     e("my_set = {3, 4, 5}")
@@ -164,6 +172,9 @@ def test_dict(i, e):
 
     with utils.raises(IterableTooLong):
         e("toolong2 = dict((f'{i:03}', 'a') for i in range(200, 343))")
+
+    with utils.raises(IterableTooLong):
+        e("{**long, **long2}")
 
 
 def test_that_it_still_works_right(i, e):

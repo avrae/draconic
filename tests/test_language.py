@@ -161,6 +161,12 @@ class TestCompoundAssignments:
         with utils.raises(DraconicValueError):
             e("a, b = 1")
 
+        with utils.raises(DraconicValueError):
+            e("a, *b = tuple()")
+
+        with utils.raises(DraconicSyntaxError):
+            e("a, *b, *c, = (1, 2, 3)")
+
     def test_iterator_unpack(self, i, e):
         i.builtins["range"] = range
         e("a, b, c, d = range(4)")
@@ -174,6 +180,20 @@ class TestCompoundAssignments:
         assert e("b") == 2
         assert e("c") == 3
         assert e("d") == 4
+
+    def test_starred_unpack(self, e):
+        e("a, *b = (1, 2, 3, 4)")
+        assert e("a") == 1
+        assert e("b") == [2, 3, 4]
+
+        e('a, *b, c = (1, "foo", "bar", "baz", 5)')
+        assert e("a") == 1
+        assert e("b") == ["foo", "bar", "baz"]
+        assert e("c") == 5
+
+        e("a, *b = [i + 1 for i in range(4)]")
+        assert e("a") == 1
+        assert e("b") == [2, 3, 4]
 
     def test_compound_assignments(self, e):
         e("a = [1, 2, 3]")
@@ -235,6 +255,19 @@ class TestCompoundAssignments:
         e("b[0] = 0")
         assert e("a") == [0, 2, 3]
         assert e("b") == [0, 2, 3]
+
+    def test_unwrapping(self, e):
+        e("a = [1, 2, 3]")
+        e("b = [4, 5, 6]")
+
+        assert e("[*a, *b]") == [1, 2, 3, 4, 5, 6]
+        assert e("[*a, *a, *b, *b]") == [1, 2, 3, 1, 2, 3, 4, 5, 6, 4, 5, 6]
+
+        e('a = {"a": 1, "b": 2}')
+        e('b = {"c": 3, "d": 4}')
+
+        assert e("{**a, **b}") == {"a": 1, "b": 2, "c": 3, "d": 4}
+        assert e("{**a, **a, **b, **b}") == {"a": 1, "b": 2, "c": 3, "d": 4}
 
 
 class TestNamedExpressions:
