@@ -65,6 +65,13 @@ def test_list(i, e):
     with utils.raises(IterableTooLong):
         e("[*long, *long]")
 
+    # we should be able to unpack at the limit
+    e("[*long]")
+
+    # functions shouldn't be limited
+    i.builtins["max"] = max
+    e("max(*long, *long)")
+
     # we should always be operating using safe lists
     i.builtins["reallist"] = [1, 2, 3]
     e("my_list = [1, 2, 3]")
@@ -135,6 +142,9 @@ def test_set(i, e):
     with utils.raises(IterableTooLong):
         e("{*longer}")
 
+    # we should be able to unpack at the limit
+    e("{*long}")
+
     # we should always be operating using safe sets
     i.builtins["realset"] = {1, 2, 3}
     e("my_set = {3, 4, 5}")
@@ -175,6 +185,9 @@ def test_dict(i, e):
 
     with utils.raises(IterableTooLong):
         e("{**long, **long2}")
+
+    # we should be able to unpack at the limit
+    e("{**long}")
 
 
 def test_that_it_still_works_right(i, e):
