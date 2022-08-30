@@ -129,3 +129,33 @@ foo
 >>> print(foo.doc)
 I am foo
 ```
+
+### Try/Except
+
+As Draconic currently has no user-defined class implementation, it is impossible to provide a type by name to an 
+`except` clause. Instead, Draconic requires `except` clause types to be a string literal or tuple of string literals.
+These are matched against the name of the exception, with no subclass checking.
+
+**Python**
+
+```pycon
+>>> try:
+...     1/0
+... except Exception:
+...     print("I catch all exceptions!")
+... except ZeroDivisionError:
+...     print("You divided by zero!")
+I catch all exceptions!
+```
+
+**Draconic**
+
+```pycon
+>>> try:
+...     1/0
+... except "Exception":
+...     print("I catch all exceptions!")
+... except "ZeroDivisionError":
+...     print("You divided by zero!")
+You divided by zero!
+```
