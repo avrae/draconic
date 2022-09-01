@@ -391,3 +391,24 @@ def test_stmt_limit(i):
     with temp_limits(i, max_statements=10):
         with utils.raises(TooManyStatements):
             i.execute(expr)
+
+
+def test_func_limit(ex):
+    # functions should not be able to escape
+    okay_expr = """
+    long = "f"*999
+    def test_args(*args):
+        return args
+    test_args(long)
+    """
+
+    bad_expr = """
+    long = "f"*999
+    def test_args(*args):
+        return args
+    test_args(long, long)
+    """
+
+    ex(okay_expr)
+    with utils.raises(IterableTooLong):
+        ex(bad_expr)
