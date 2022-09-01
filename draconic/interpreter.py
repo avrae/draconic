@@ -934,9 +934,13 @@ class DraconicInterpreter(SimpleInterpreter):
                 self._names[kwargonly.arg] = self._eval(arguments.kw_defaults[k_i])
         # *args
         if arguments.vararg is not None:
+            if approx_len_of(args[args_i:]) > self._config.max_const_len:
+                raise IterableTooLong(f"**{arguments.vararg.arg} would be too large")
             self._names[arguments.vararg.arg] = tuple(args[args_i:])
         # **kwargs
         if arguments.kwarg is not None:
+            if approx_len_of(kwargs) > self._config.max_const_len:
+                raise IterableTooLong(f"**{arguments.kwarg.arg} would be too large")
             self._names[arguments.kwarg.arg] = kwargs
         elif kwargs:  # and arguments.kwarg is None (implicit)
             raise TypeError(f"{__functiondef._name}() got unexpected keyword arguments: {tuple(kwargs.keys())}")
