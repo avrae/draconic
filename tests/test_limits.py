@@ -393,22 +393,27 @@ def test_stmt_limit(i):
             i.execute(expr)
 
 
-def test_func_limit(ex):
+def test_func_limit(i, e):
     # functions should not be able to escape
-    okay_expr = """
-    long = "f"*999
-    def test_args(*args):
-        return args
-    test_args(long)
-    """
+    e("""long = "f"*999""")
+    e(
+        """
+def test(*args):
+    return args
+"""
+    )
 
-    bad_expr = """
-    long = "f"*999
-    def test_args(*args):
-        return args
-    test_args(long, long)
-    """
-
-    ex(okay_expr)
+    e("test(long)")
     with utils.raises(IterableTooLong):
-        ex(bad_expr)
+        e("test(long, long)")
+
+    # should also apply to lambda functions
+    e("""test2 = lambda *args: args""")
+    e("test(long)")
+    with utils.raises(IterableTooLong):
+        e("test(long, long)")
+
+    i.builtins["max"] = max
+
+    # should not apply to builtins
+    e("max(long, long)")
