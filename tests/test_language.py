@@ -21,6 +21,17 @@ def test_empty(e):
     assert e("") is None
 
 
+def test_starred(e):
+    with utils.raises(DraconicSyntaxError):
+        e("*()")
+
+    with utils.raises(TypeError):
+        e("[*0]")
+
+    with utils.raises(TypeError):
+        e("{**[1, 2 ,3]}")
+
+
 class TestOperations:
     """
     Tests the operations with a custom handler:

@@ -408,6 +408,17 @@ def test_loop_limit(i):
             i.execute(expr2)
 
 
+def test_starred_limit(i, e):
+    i._names["long"] = range(101)
+    i._names["dict_long"] = {i: x for i, x in enumerate(range(100, -1, -1))}
+    with temp_limits(i, max_loops=100):
+        with utils.raises(IterableTooLong):
+            i.execute("[*long]")
+
+        with utils.raises(IterableTooLong):
+            i.execute("{**dict_long}")
+
+
 def test_stmt_limit(i):
     expr = """
     a = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1
