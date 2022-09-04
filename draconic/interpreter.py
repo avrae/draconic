@@ -654,7 +654,7 @@ class DraconicInterpreter(SimpleInterpreter):
             else:
                 retval = self._eval(key) if isinstance(key, ast.AST) else key, evalue
                 if check_len:
-                    total_len += sum([approx_len_of(val) for val in retval]) + 1
+                    total_len += sum(approx_len_of(val) for val in retval) + 1
                     if total_len > self._config.max_const_len:
                         raise IterableTooLong("Unwrapping generates too much", items, self._expr)
                 yield retval
