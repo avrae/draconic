@@ -610,9 +610,7 @@ class DraconicInterpreter(SimpleInterpreter):
             if type(node) is ast.Starred:
                 evalue = self._eval(node.value)
                 try:
-                    iterable = iter(evalue)
-                    sentinel = object()
-                    while (retval := next(iterable, sentinel)) is not sentinel:
+                    for retval in evalue:
                         self._loops += 1
                         if self._loops > self._config.max_loops:
                             raise IterableTooLong("Unwrapping generates too many elements", nodes, self._expr)
@@ -638,9 +636,7 @@ class DraconicInterpreter(SimpleInterpreter):
             evalue = self._eval(value)
             if key is None:
                 if isinstance(evalue, Mapping):
-                    iterable = iter(evalue.items())
-                    sentinel = object()
-                    while (retval := next(iterable, sentinel)) is not sentinel:
+                    for retval in evalue.items():
                         self._loops += 1
                         if self._loops > self._config.max_loops:
                             raise IterableTooLong("Unwrapping generates too many elements", items, self._expr)
