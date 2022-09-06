@@ -391,3 +391,29 @@ def test_stmt_limit(i):
     with temp_limits(i, max_statements=10):
         with utils.raises(TooManyStatements):
             i.execute(expr)
+
+
+def test_func_limit(i, e):
+    # functions should not be able to escape
+    e("""long = "f"*999""")
+    e(
+        """
+def test(*args):
+    return args
+"""
+    )
+
+    e("test(long)")
+    with utils.raises(IterableTooLong):
+        e("test(long, long)")
+
+    # should also apply to lambda functions
+    e("""test2 = lambda *args: args""")
+    e("test(long)")
+    with utils.raises(IterableTooLong):
+        e("test(long, long)")
+
+    i.builtins["max"] = max
+
+    # should not apply to builtins
+    e("max(long, long)")
