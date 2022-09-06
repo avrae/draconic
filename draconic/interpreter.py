@@ -730,18 +730,9 @@ class DraconicInterpreter(SimpleInterpreter):
                         values,
                         self._expr,
                     )
-                for t, v in zip(names.elts, values):
-                    if t is starred:
-                        break
-                    values.remove(v)
-                    self._assign_unpack(t, v)
 
-                for t, v in zip(reversed(names.elts), reversed(values)):
-                    if t is starred:
-                        break
-                    values.remove(v)
+                for t, v in zip_star(names.elts, values, star_index=names.elts.index(starred)):
                     self._assign_unpack(t, v)
-                self._assign_unpack(starred, values)
 
     def _assign_starred(self, name, value):
         self._assign_name(name.value, value)
