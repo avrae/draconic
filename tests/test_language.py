@@ -206,6 +206,17 @@ class TestCompoundAssignments:
         assert e("a") == 1
         assert e("b") == [2, 3, 4]
 
+        e("a, (b, *c, (d, *e, f), g), *h, i = (1, (2, 3, 4, (5, 6, 7, 8), 9), 10, 11, 12)")
+        assert e("a") == 1
+        assert e("b") == 2
+        assert e("c") == [3, 4]
+        assert e("d") == 5
+        assert e("e") == [6, 7]
+        assert e("f") == 8
+        assert e("g") == 9
+        assert e("h") == [10, 11]
+        assert e("i") == 12
+
     def test_compound_assignments(self, e):
         e("a = [1, 2, 3]")
         e('b = {"foo": "bar"}')
