@@ -215,13 +215,7 @@ class SimpleInterpreter(OperatorMixin):
         except (AttributeError, TypeError):
             pass
 
-        # Try and look for [x] if .x doesn't work
-        try:
-            return node_evaluated[node.attr]
-        except (KeyError, TypeError):
-            pass
-
-        # If it is neither, raise an exception
+        # If it is not present, raise an exception
         raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node, self._expr)
 
     def _eval_index(self, node):
