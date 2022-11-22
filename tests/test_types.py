@@ -126,6 +126,10 @@ class TestDict:
         e("a.update(a='foo')")
         assert e("a") == {1: 1, 2: 2, 3: 3, "a": "foo"}
 
+    def test_access(self, i, e):
+        e("a = {'a': 1, 'b': 2}")
+        assert e("a.a") == e("a['a']")
+
     if PY_39:
 
         def test_union_op(self, e):
