@@ -190,3 +190,7 @@ def test_strip(e):
     assert e("' aaa  '.strip()") == "aaa"
     assert e("'foobar'.lstrip('f')") == "oobar"
     assert e("'foobar'.rstrip('ra')") == "foob"
+
+
+def test_internal_data(e):
+    assert type(e("'a'").data) is type(e("str('a')").data)
