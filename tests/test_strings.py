@@ -80,6 +80,7 @@ def test_rjust(e):
 
 def test_translate(e):
     assert e("'foo'.translate({102: 'ba', 111: 'na'})") == "banana"
+    assert e("str('bar').translate({98: 'na', 97: 'nana', 114: 'ba'})") == "nananaba"
     with utils.raises(IterableTooLong):
         e("'ff'.translate({102: 'a'*999})")
 
