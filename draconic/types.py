@@ -262,6 +262,18 @@ def safe_str(config):
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().ljust(width, *args)
 
+        @staticmethod
+        def maketrans(*args):
+            if len(args) == 1 and isinstance(args[0], dict):
+                # str.maketrans expects a dict object and nothing else
+                # So SafeDict needs to be cast to dict for the method to work
+                return _real_str.maketrans(dict(args[0]))
+
+            if sum(approx_len_of(a) for a in args) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This dict is too large")
+
+            return _real_str.maketrans(*args)
+
         def replace(self, old, new, maxsplit=-1):
             if maxsplit > 0:
                 n = maxsplit
