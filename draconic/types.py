@@ -223,8 +223,13 @@ def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
     class str(UserString, _real_str):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+        def __init__(self, seq):
+            if isinstance(seq, UserString):
+                self.data = seq.data[:]
+            elif isinstance(seq, _real_str):
+                self.data = seq
+            else:
+                self.data = _real_str(seq)
 
         def center(self, width, *args):
             if width > config.max_const_len:
