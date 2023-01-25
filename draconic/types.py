@@ -205,6 +205,12 @@ def safe_dict(config):
             super().__delitem__(key)
             self.__approx_len__ -= 1
 
+        def __getattr__(self, attr):
+            try:
+                return self[attr]
+            except KeyError:
+                raise AttributeError
+
         if PY_39:
 
             def __or__(self, other):
