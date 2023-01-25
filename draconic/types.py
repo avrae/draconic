@@ -223,8 +223,13 @@ def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
     class str(UserString, _real_str):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+        def __init__(self, seq):
+            if isinstance(seq, UserString):
+                self.data = seq.data[:]
+            elif isinstance(seq, _real_str):
+                self.data = seq
+            else:
+                self.data = _real_str(seq)
 
         def center(self, width, *args):
             if width > config.max_const_len:
@@ -256,6 +261,18 @@ def safe_str(config):
             if width > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This str is too large")
             return super().ljust(width, *args)
+
+        @staticmethod
+        def maketrans(*args):
+            if len(args) == 1 and isinstance(args[0], dict):
+                # str.maketrans expects a dict object and nothing else
+                # So SafeDict needs to be cast to dict for the method to work
+                return _real_str.maketrans(dict(args[0]))
+
+            if sum(approx_len_of(a) for a in args) > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This dict is too large")
+
+            return _real_str.maketrans(*args)
 
         def replace(self, old, new, maxsplit=-1):
             if maxsplit > 0:
