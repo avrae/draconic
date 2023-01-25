@@ -194,3 +194,11 @@ def test_strip(e):
 
 def test_internal_data(e):
     assert type(e("'a'").data) is type(e("str('a')").data)
+
+
+def test_maketrans(e):
+    assert e("str.maketrans({'a': 'b'})") == {97: "b"}
+    assert e("str.maketrans('a', 'b')") == {97: 98}
+    assert e("str.maketrans('a', 'b', 'c')") == {97: 98, 99: None}
+    with utils.raises(TypeError, match="if you give only one argument to maketrans it must be a dict"):
+        assert e("str.maketrans('a')")
