@@ -607,11 +607,11 @@ class DraconicInterpreter(SimpleInterpreter):
                     for retval in evalue:
                         self._loops += 1
                         if self._loops > self._config.max_loops:
-                            raise IterableTooLong("Unwrapping generates too many elements", nodes, self._expr)
+                            raise IterableTooLong("Unwrapping generates too many elements", node, self._expr)
                         if check_len:
                             total_len += approx_len_of(retval) + 1
                             if total_len > self._config.max_const_len:
-                                raise IterableTooLong("Unwrapping generates too much", nodes, self._expr)
+                                raise IterableTooLong("Unwrapping generates too much", node, self._expr)
                         yield retval
                 except TypeError:
                     raise TypeError(f"Value after * must be iterable, got {type(evalue).__name__}")
@@ -620,7 +620,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 if check_len:
                     total_len += approx_len_of(retval) + 1
                     if total_len > self._config.max_const_len:
-                        raise IterableTooLong("Unwrapping generates too much", nodes, self._expr)
+                        raise IterableTooLong("Unwrapping generates too much", node, self._expr)
                 yield retval
 
     def _starred_keyword_unwrap(self, items, *, check_len=True):
@@ -633,11 +633,11 @@ class DraconicInterpreter(SimpleInterpreter):
                     for retval in evalue.items():
                         self._loops += 1
                         if self._loops > self._config.max_loops:
-                            raise IterableTooLong("Unwrapping generates too many elements", items, self._expr)
+                            raise IterableTooLong("Unwrapping generates too many elements", value, self._expr)
                         if check_len:
                             total_len += sum(approx_len_of(val) for val in retval) + 1
                             if total_len > self._config.max_const_len:
-                                raise IterableTooLong("Unwrapping generates too much", items, self._expr)
+                                raise IterableTooLong("Unwrapping generates too much", value, self._expr)
                         yield retval
                 else:
                     raise TypeError(f"argument after ** must be a mapping, got {type(value).__name__}")
@@ -646,7 +646,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 if check_len:
                     total_len += sum(approx_len_of(val) for val in retval) + 1
                     if total_len > self._config.max_const_len:
-                        raise IterableTooLong("Unwrapping generates too much", items, self._expr)
+                        raise IterableTooLong("Unwrapping generates too much", value, self._expr)
                 yield retval
 
     # ===== assignments =====
