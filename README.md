@@ -159,3 +159,31 @@ I catch all exceptions!
 ...     print("You divided by zero!")
 You divided by zero!
 ```
+
+### Starred Unpacking
+
+Assigning to a starred variable outside of a tuple or list in Python throws a `SyntaxError`, but is valid in Draconic
+
+**Python**
+
+```pycon
+>>> *a = [1, 2, 3]
+SyntaxError: starred assignment target must be in a list or tuple
+```
+
+**Draconic**
+
+```pycon
+>>> *a = [1, 2, 3]
+>>> a
+[1, 2, 3]
+```
+
+This has syntactical equivalents in Python:
+
+```pycon
+>>> *a, = [1, 2, 3]
+>>> [*b] = [1, 2, 3]
+>>> (*c,) = [1, 2, 3]
+>>> assert a == b == c == [1, 2, 3]
+```
