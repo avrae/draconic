@@ -29,17 +29,19 @@ def approx_len_of(obj, visited=None):
         obj = obj.items()
 
     try:
-        for child in iter(obj):
+        obj_iter = iter(obj)
+    except TypeError:  # object is not iterable
+        pass
+    else:
+        for child in obj_iter:
             if child in visited:
                 continue
             size += approx_len_of(child, visited)
             visited.append(child)
-    except TypeError:  # object is not iterable
-        pass
 
     try:
         setattr(obj, "__approx_len__", size)
-    except AttributeError:
+    except (AttributeError, TypeError):
         pass
 
     return size
