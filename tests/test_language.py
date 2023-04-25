@@ -163,20 +163,30 @@ class TestCompoundAssignments:
         assert e("d") == "foo"
 
     def test_bad_unpacks(self, e):
-        with utils.raises(DraconicValueError):
+        with utils.raises(DraconicValueError) as exc_info:
             e("a, b, c = (1, 2)")
 
-        with utils.raises(DraconicValueError):
+        assert exc_info.value.node.lineno == 1
+
+        with utils.raises(DraconicValueError) as exc_info:
             e("a, b = (1, 2, 3)")
 
-        with utils.raises(DraconicValueError):
+        assert exc_info.value.node.lineno == 1
+
+        with utils.raises(DraconicValueError) as exc_info:
             e("a, b = 1")
 
-        with utils.raises(DraconicValueError):
+        assert exc_info.value.node.lineno == 1
+
+        with utils.raises(DraconicValueError) as exc_info:
             e("a, *b = tuple()")
 
-        with utils.raises(DraconicSyntaxError):
+        assert exc_info.value.node.lineno == 1
+
+        with utils.raises(DraconicSyntaxError) as exc_info:
             e("a, *b, *c, = (1, 2, 3)")
+
+        assert exc_info.value.lineno == 1
 
     def test_iterator_unpack(self, i, e):
         i.builtins["range"] = range
