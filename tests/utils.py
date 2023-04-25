@@ -28,7 +28,7 @@ def raises(expected_exception, **kwargs):
         inner_expected = (expected_exception, WrappedException)
 
     with pytest.raises(inner_expected, **kwargs) as exc_info:
-        yield
+        yield exc_info
 
     # if we're here, the exception type is either the expected type or an unknown one of our wrappers
 
