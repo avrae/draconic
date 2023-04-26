@@ -704,13 +704,13 @@ class DraconicInterpreter(SimpleInterpreter):
                 if len(names.elts) > len(values):
                     raise DraconicValueError(
                         f"not enough values to unpack (expected {len(names.elts)}, got {len(values)})",
-                        values,
+                        names,
                         self._expr,
                     )
                 elif len(names.elts) < len(values):
                     raise DraconicValueError(
                         f"too many values to unpack (expected {len(names.elts)}, got {len(values)})",
-                        values,
+                        names,
                         self._expr,
                     )
                 for t, v in zip(names.elts, values):
@@ -721,7 +721,7 @@ class DraconicInterpreter(SimpleInterpreter):
                 if len(values) < (len(names.elts) - 1):
                     raise DraconicValueError(
                         f"not enough values to unpack (expected at least {len(names.elts) - 1}, got {len(values)})",
-                        values,
+                        names,
                         self._expr,
                     )
 
