@@ -1,6 +1,7 @@
 """
 Test cases adapted from SimpleEval: https://github.com/danthedeckie/simpleeval
 """
+
 import ast
 import operator
 import sys

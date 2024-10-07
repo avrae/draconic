@@ -1,4 +1,5 @@
 """String utilities for the userstring type."""
+
 import re
 
 from .exceptions import IterableTooLong, _raise_in_context
