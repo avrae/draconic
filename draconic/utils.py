@@ -1,6 +1,7 @@
 """
 This submodule contains helpful public utilities.
 """
+
 import textwrap
 from collections import namedtuple
 from typing import List, Union

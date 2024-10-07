@@ -9,7 +9,7 @@ __all__ = ("DraconicConfig", "OperatorMixin", "zip_star")
 
 # ===== config =====
 DISALLOW_PREFIXES = ["_", "func_"]
-DISALLOW_METHODS = ["format", "format_map", "mro"]
+DISALLOW_METHODS = ["format", "format_map", "mro", "tb_frame", "gi_frame", "ag_frame", "cr_frame", "exec"]
 
 
 class DraconicConfig:
