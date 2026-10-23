@@ -21,7 +21,7 @@ def approx_len_of(obj, visited=None):
         return obj.__approx_len__
 
     if visited is None:
-        visited = [obj]
+        visited = {id(obj): obj}
 
     size = op.length_hint(obj)
 
@@ -33,11 +33,14 @@ def approx_len_of(obj, visited=None):
     except TypeError:  # object is not iterable
         pass
     else:
+        # visited is keyed by id (linear membership, vs a value-based `in` scan that is quadratic
+        # and collapses distinct-but-equal siblings); it maps id -> object so each visited object
+        # stays alive, otherwise a freed child (e.g. a dict.items() tuple) could have its id reused.
         for child in obj_iter:
-            if child in visited:
+            if id(child) in visited:
                 continue
+            visited[id(child)] = child
             size += approx_len_of(child, visited)
-            visited.append(child)
 
     try:
         setattr(obj, "__approx_len__", size)
@@ -88,6 +91,18 @@ def safe_list(config):
             new = SafeList()
             new.data = self.data * n
             new.__approx_len__ = self.__approx_len__ * n
+            return new
+
+        def __add__(self, other):
+            new = SafeList()
+            new.data = self.data + (other.data if isinstance(other, UserList) else list(other))
+            new.__approx_len__ = self.__approx_len__ + approx_len_of(other)
+            return new
+
+        def __radd__(self, other):
+            new = SafeList()
+            new.data = (other.data if isinstance(other, UserList) else list(other)) + self.data
+            new.__approx_len__ = approx_len_of(other) + self.__approx_len__
             return new
 
     return SafeList
