@@ -129,39 +129,32 @@ def test_excepting_limits(i, ex):
         max_recursion_depth=3,
     ):
         with utils.raises(NumberTooHigh):
-            ex(
-                """
+            ex("""
                 try:
                     return 7 + 7
                 except "NumberTooHigh":
                     pass
-                """
-            )
+                """)
 
         with utils.raises(IterableTooLong):
-            ex(
-                """
+            ex("""
                 try:
                     return "aaaaaaaaaaa"
                 except "IterableTooLong":
                     pass
-                """
-            )
+                """)
 
         with utils.raises(TooManyStatements):
-            ex(
-                """
+            ex("""
                 try:
                     for _ in "123456789": pass
                     for _ in "123456789": pass
                 except "TooManyStatements":
                     pass
-                """
-            )
+                """)
 
         with utils.raises(TooMuchRecursion):
-            ex(
-                """
+            ex("""
                 def foo():
                     foo()
                 
@@ -169,18 +162,15 @@ def test_excepting_limits(i, ex):
                     foo()
                 except "TooMuchRecursion":
                     pass
-                """
-            )
+                """)
 
         with utils.raises(NumberTooHigh):
-            ex(
-                """
+            ex("""
                 try:
                     return 7 + 7
                 except:
                     pass
-                """
-            )
+                """)
 
 
 def test_incorrect_except_types(ex):

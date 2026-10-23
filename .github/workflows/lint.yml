@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install black
+          pip install black==26.10.1
 
       - name: Ensure code is blackified
         run: |

@@ -431,12 +431,10 @@ def test_stmt_limit(i):
 def test_func_limit(i, e):
     # functions should not be able to escape
     e("""long = "f"*999""")
-    e(
-        """
+    e("""
 def test(*args):
     return args
-"""
-    )
+""")
 
     e("test(long)")
     with utils.raises(IterableTooLong):
