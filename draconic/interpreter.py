@@ -8,7 +8,7 @@ from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
 from .versions import PY_310
-from .types import approx_len_of
+from .types import approx_len_of, bound_method
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -211,7 +211,7 @@ class SimpleInterpreter(OperatorMixin):
 
         # Maybe the base object is an actual object, not just a dict
         try:
-            return getattr(node_evaluated, node.attr)
+            return bound_method(self._config, node_evaluated, node.attr, getattr(node_evaluated, node.attr))
         except (AttributeError, TypeError):
             # If it is not present, raise an exception
             raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node, self._expr)
@@ -465,6 +465,7 @@ class DraconicInterpreter(SimpleInterpreter):
     def _preflight(self):
         self._num_stmts = 0
         self._loops = 0
+        self._config.output_len_used = 0
         super()._preflight()
 
     def _eval(self, node):
