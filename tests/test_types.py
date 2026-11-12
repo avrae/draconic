@@ -1,3 +1,5 @@
+import pytest
+
 from draconic.versions import PY_39
 from . import utils
 
@@ -141,3 +143,48 @@ class TestDict:
 
             e("c |= b")
             assert e("c") == {"a": 1, "b": 3, "c": 4}
+
+
+def _count_calls(monkeypatch, name):
+    import draconic.types
+
+    calls = []
+    original = getattr(draconic.types, name)
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(draconic.types, name, counting)
+    return counting, calls
+
+
+def _doubling_chain(depth):
+    level = [0]
+    for _ in range(depth):
+        level = [level, level]
+    return level
+
+
+def test_size_helpers_count_shared_references():
+    from draconic.types import approx_len_of, approx_repr_len
+
+    leaf = [1, 2, 3]
+    shared = [leaf, leaf]
+    assert approx_len_of(shared) == 2 + 3 + 3
+    assert approx_repr_len(shared) == len(repr(shared))
+    chain = _doubling_chain(10)
+    assert approx_repr_len(chain) == len(repr(chain))
+
+
+@pytest.mark.parametrize("name", ["approx_len_of", "approx_repr_len"])
+def test_size_helpers_are_linear(monkeypatch, name):
+    # a doubling chain has 2**depth leaves when expanded but only depth + 1 distinct lists
+    helper, calls = _count_calls(monkeypatch, name)
+    helper(_doubling_chain(40))
+    assert len(calls) <= 3 * 41
+
+    # many distinct-but-equal siblings, the case draconic#35 made linear
+    calls.clear()
+    helper([[0] for _ in range(5000)])
+    assert len(calls) <= 3 * 5000 + 1

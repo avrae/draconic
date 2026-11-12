@@ -450,3 +450,203 @@ def test(*args):
 
     # should not apply to builtins
     e("max(long, long)")
+
+
+def test_int_to_bytes_limit(i, e):
+    assert e("(255).to_bytes(2, 'big')") == b"\x00\xff"
+    assert len(e("(1).to_bytes(1000, 'big')")) == 1000
+    for expr in (
+        "(1).to_bytes(1001, 'big')",
+        "(1).to_bytes(length=1001, byteorder='big')",
+        "int.to_bytes(1, 1001, 'big')",
+        "True.to_bytes(1001, 'little')",
+    ):
+        with utils.raises(IterableTooLong):
+            e(expr)
+
+
+def test_int_to_bytes_limit_simple_interpreter():
+    from draconic import SimpleInterpreter
+
+    interpreter = SimpleInterpreter(config=DraconicConfig(max_const_len=1000))
+    with utils.raises(IterableTooLong):
+        interpreter.eval("(1).to_bytes(1001, 'big')")
+
+
+def test_bytes_growth_limits(i, e):
+    i.builtins["b"] = b"\x00" * 10
+    i.builtins["tab"] = b"\t" * 10
+    i.builtins["bytes"] = bytes
+    assert len(e("b.center(20)")) == 20
+    assert e("b.replace(b[:1], b[:2])") == b"\x00" * 20
+    assert e("b[:1].join([b, b])") == b"\x00" * 21
+    for expr in (
+        "b.center(1001)",
+        "b.ljust(1001)",
+        "b.rjust(1001)",
+        "b.zfill(1001)",
+        "tab.expandtabs(101)",
+        "b.replace(b[:1], b * 11)",
+        "b.join([b] * 100)",
+        "bytes.center(b, 1001)",
+    ):
+        with utils.raises(IterableTooLong):
+            e(expr)
+
+
+def test_shared_references_count_toward_limits(i, ex):
+    # the same list referenced many times inside one literal counts at every reference
+    refs = ", ".join(["a"] * 20)
+    with utils.raises(IterableTooLong):
+        ex(f"a = [0] * 100\nb = [{refs}]")
+
+
+def test_nested_shared_references_str():
+    # the list fits max_const_len (each level is 10 references to the one below), but its string would not
+    config = DraconicConfig(max_output_len=10_000)
+    interpreter = DraconicInterpreter(config=config, builtins={"range": range, "str": str, "len": len})
+    expr = """
+a = ["x" * 100]
+for _ in range(3):
+    b = []
+    for _ in range(10):
+        b.append(a)
+    a = b
+return {}
+"""
+    for conversion in ("str(a)", "f'{a}'", "'%s' % (a,)", "str({'k': a})", "str({'k': [a]})"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(expr.format(conversion))
+    assert interpreter.execute(expr.format("len(str(a[0][0]))")) == len(str([["x" * 100]] * 10))
+    # growing a shared child after it was placed in a parent is caught when the parent is converted
+    with utils.raises(IterableTooLong):
+        interpreter.execute(
+            "a = ['x']\nb = []\nfor _ in range(100):\n    b.append(a)\na.extend(['y' * 100] * 10)\nreturn str(b)"
+        )
+
+
+def test_cyclic_structures_still_convert(i, ex):
+    assert ex("a = [1]\na.append(a)\nreturn str(a)") == "[1, [...]]"
+    assert ex("d = {}\nd['self'] = d\nreturn str(d)") == "{'self': {...}}"
+
+
+def test_max_output_len_config():
+    interpreter = DraconicInterpreter(config=DraconicConfig(max_output_len=100))
+    interpreter.builtins.update(str=str, range=range)
+    assert interpreter.execute("return str(list(range(10)))") == str(list(range(10)))
+    for expr in ("str(list(range(100)))", "str(set(range(100)))", "str({x: x for x in range(100)})"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"return {expr}")
+
+
+def test_total_output_len_covers_unchecked_wrappers():
+    config = DraconicConfig(max_output_len=100, max_total_output_len=300)
+    interpreter = DraconicInterpreter(config=config, builtins={"str": str, "range": range})
+    setup = "a = list(range(25))\nd = {1: a, 2: a, 3: a, 4: a, 5: a, 6: a}\ndef f(*x):\n    return x\n"
+    for expr in ("str((a, a, a, a, a, a))", "str(tuple([a] * 6))", "str(d.values())", "str(f(a, a, a, a, a, a))"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"{setup}return {expr}")
+
+
+def test_total_output_len_resets_per_execution():
+    config = DraconicConfig(max_total_output_len=1000)
+    interpreter = DraconicInterpreter(config=config, builtins={"str": str, "range": range})
+    for _ in range(5):  # each run converts ~400 chars; only the sum within one run counts
+        assert interpreter.execute("return str(list(range(100)))") == str(list(range(100)))
+    with utils.raises(IterableTooLong):
+        interpreter.execute("a = list(range(100))\nfor _ in range(5):\n    str(a)")
+
+
+def test_list_additions_count_item_size(i, ex):
+    i.builtins.update(range=range, str=str, tuple=tuple)
+    for add in ("l.append(s)", "l.insert(0, s)", "l[0:0] = [s]"):
+        # one 900-char item fits, but it must count as 900, not 1, so the multiplication is refused
+        with utils.raises(IterableTooLong):
+            ex(f"s = 'x' * 900\nl = []\n{add}\nl2 = l * 100")
+    with utils.raises(IterableTooLong):
+        ex("s = 'x' * 900\nl = []\nl.append(s)\nl.append(s)")
+
+
+def test_list_removals_release_item_size(i, ex):
+    i.builtins.update(range=range)
+    # 50 rounds of adding and removing a 900-char item never hold more than one at a time
+    for remove in ("l.pop()", "l.remove(s)", "l[0] = 0", "l[0:1] = []"):
+        assert (
+            ex(
+                f"s = 'x' * 900\nl = [0]\nfor _ in range(50):\n    l[0:1] = [s]\n    {remove}\n    l[0:0] = [0]\nreturn 1"
+            )
+            == 1
+        )
+
+
+def test_dict_keys_count_toward_limits(i, ex):
+    i.builtins.update(range=range, str=str, len=len)
+    with utils.raises(IterableTooLong):
+        ex("d = {}\nfor n in range(20):\n    d['x' * 90 + str(n)] = 0")
+    with utils.raises(IterableTooLong):
+        ex("d = {}\nfor n in range(20):\n    d.setdefault('x' * 90 + str(n), 0)")
+    # overwriting or deleting keys releases their size
+    assert ex("d = {}\nfor n in range(200):\n    d['k' * 90] = n\nreturn d['k' * 90]") == 199
+    assert (
+        ex("d = {}\nfor n in range(200):\n    d['k' * 90 + str(n)] = n\n    d.pop('k' * 90 + str(n))\nreturn len(d)")
+        == 0
+    )
+
+
+def _interpreter(**limits):
+    # no "str" builtin: the interpreter's own str is the size-checked one
+    return DraconicInterpreter(config=DraconicConfig(**limits), builtins={"range": range, "len": len})
+
+
+def test_conversions_of_unchecked_containers():
+    interpreter = _interpreter(max_output_len=1000)
+    setup = "t = tuple(range(300))\nd = {n: n for n in range(300)}\n"
+    for expr in ("str(t)", "f'{t}'", "'%s' % (t,)", "str(d.keys())", "f'{d.items()}'"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"{setup}return {expr}")
+    assert interpreter.execute("return str((1, 2)) + f'{(3,)}' + '%s' % ((4,),)") == "(1, 2)(3,)(4,)"
+
+
+def test_finally_cannot_swallow_limit_errors():
+    interpreter = _interpreter(max_const_len=1000)
+    for exit_ in ("continue", "break"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"for _ in range(3):\n    try:\n        x = [0] * 2000\n    finally:\n        {exit_}")
+    with utils.raises(IterableTooLong):
+        interpreter.execute("def f():\n    try:\n        x = [0] * 2000\n    finally:\n        return 1\nreturn f()")
+    # ordinary exceptions are still replaced by a return in finally, as in Python
+    assert interpreter.execute("def f():\n    try:\n        x = 1 / 0\n    finally:\n        return 1\nreturn f()") == 1
+
+
+def test_rejected_conversion_does_not_use_total_output_len():
+    config = DraconicConfig(max_output_len=100, max_total_output_len=300)
+    interpreter = DraconicInterpreter(config=config, builtins={"str": str, "range": range})
+    with utils.raises(IterableTooLong):
+        interpreter.execute("a = list(range(100))\nstr(a)")
+    interpreter._preflight = lambda: None  # keep the counter, as Avrae's ScriptingEvaluator does
+    assert interpreter.execute("return str([1, 2])") == "[1, 2]"
+
+
+def test_negative_list_multiplier_cannot_hide_size():
+    with utils.raises(IterableTooLong):
+        _interpreter(max_const_len=1000).execute(
+            "x = [0] * -(2 ** 60)\nx.append(0)\nfor _ in range(12):\n    x.extend(x)"
+        )
+
+
+def test_set_add_counts_element_size():
+    with utils.raises(IterableTooLong):
+        _interpreter(max_const_len=1000).execute("s = set()\nfor n in range(100):\n    s.add('x' * 90 + str(n))")
+
+
+def test_repeated_updates_do_not_accumulate_size():
+    interpreter = _interpreter(max_const_len=1000)
+    for loop in (
+        "d = {}\nfor n in range(3000):\n    d['k'] = n\n    d.clear()",
+        "d = {}\nfor n in range(3000):\n    d.update({'k': 'x' * 10})",
+        "d = {}\nfor n in range(3000):\n    d['k' + str(n % 5)] = 'v'\n    d.popitem()",
+        "s = set()\nfor n in range(3000):\n    s.add('x' * 10)\n    s.discard('x' * 10)",
+        "s = {'x' * 10}\nfor n in range(3000):\n    s.add('x' * 10)",
+        "s = set()\nfor n in range(3000):\n    s.update({'a', 'b'})\n    s.difference_update({'a'})",
+    ):
+        interpreter.execute(loop)

@@ -28,6 +28,8 @@ class DraconicConfig:
         builtins_extend_default=True,
         max_int_size=64,
         max_recursion_depth=50,
+        max_output_len=1_000_000,
+        max_total_output_len=10_000_000,
     ):
         """
         Configuration object for the Draconic interpreter.
@@ -45,6 +47,8 @@ class DraconicConfig:
                                  Integers can technically reach up to double this size before size check.
                                  *Not* the max value!
         :param int max_recursion_depth: The maximum allowed recursion depth.
+        :param int max_output_len: The maximum length of the string a list, dict, or set may be converted to.
+        :param int max_total_output_len: The maximum total length of those conversions per execution.
         """
         if disallow_prefixes is None:
             disallow_prefixes = DISALLOW_PREFIXES
@@ -63,6 +67,11 @@ class DraconicConfig:
         self.disallow_methods = disallow_methods
         self.builtins_extend_default = builtins_extend_default
         self.max_recursion_depth = max_recursion_depth
+        self.max_output_len = max_output_len
+        self.max_total_output_len = max_total_output_len
+        # runtime state, reset with the loop and statement counters
+        self.output_len_used = 0
+        self.tuple_lens = {}
 
         # types
         self._list = safe_list(self)

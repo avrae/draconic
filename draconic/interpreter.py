@@ -1,6 +1,7 @@
 import abc
 import ast
 import contextlib
+import sys
 from collections.abc import Mapping, Sequence
 from functools import cached_property
 
@@ -8,7 +9,7 @@ from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
 from .versions import PY_310
-from .types import approx_len_of
+from .types import approx_len_of, bound_method, check_output_len
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -211,7 +212,7 @@ class SimpleInterpreter(OperatorMixin):
 
         # Maybe the base object is an actual object, not just a dict
         try:
-            return getattr(node_evaluated, node.attr)
+            return bound_method(self._config, node_evaluated, node.attr, getattr(node_evaluated, node.attr))
         except (AttributeError, TypeError):
             # If it is not present, raise an exception
             raise NotDefined(f"'{type(node_evaluated).__name__}' object has no attribute {node.attr}", node, self._expr)
@@ -233,7 +234,10 @@ class SimpleInterpreter(OperatorMixin):
         length = 0
         evaluated_values = []
         for n in node.values:
-            val = str(self._eval(n))
+            val = self._eval(n)
+            if not isinstance(val, str):
+                check_output_len(self._config, val)  # e.g. a tuple, whose repr is not checked by itself
+            val = str(val)
             length += len(val)
             if length > self._config.max_const_len:
                 raise IterableTooLong(
@@ -465,6 +469,8 @@ class DraconicInterpreter(SimpleInterpreter):
     def _preflight(self):
         self._num_stmts = 0
         self._loops = 0
+        self._config.output_len_used = 0
+        self._config.tuple_lens.clear()
         super()._preflight()
 
     def _eval(self, node):
@@ -1062,8 +1068,12 @@ class DraconicInterpreter(SimpleInterpreter):
             if isinstance(retval, (_Return, _Continue, _Break)):
                 return retval
         finally:
+            in_flight = sys.exc_info()[1]
+            if isinstance(in_flight, WrappedException):
+                in_flight = in_flight.original
             retval = self._exec(node.finalbody)
-            if isinstance(retval, (_Return, _Continue, _Break)):
+            # draconic diff: return/break/continue in finally cannot swallow a limit error either
+            if isinstance(retval, (_Return, _Continue, _Break)) and not isinstance(in_flight, LimitException):
                 return retval
 
     def _except_handler_matches(self, node: ast.ExceptHandler, exc: BaseException) -> bool:
