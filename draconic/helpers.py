@@ -69,7 +69,9 @@ class DraconicConfig:
         self.max_recursion_depth = max_recursion_depth
         self.max_output_len = max_output_len
         self.max_total_output_len = max_total_output_len
-        self.output_len_used = 0  # runtime counter, reset with the loop and statement counters
+        # runtime state, reset with the loop and statement counters
+        self.output_len_used = 0
+        self.tuple_lens = {}
 
         # types
         self._list = safe_list(self)

@@ -591,3 +591,69 @@ def test_dict_keys_count_toward_limits(i, ex):
         ex("d = {}\nfor n in range(200):\n    d['k' * 90 + str(n)] = n\n    d.pop('k' * 90 + str(n))\nreturn len(d)")
         == 0
     )
+
+
+def _interpreter(**limits):
+    # no "str" builtin: the interpreter's own str is the size-checked one
+    return DraconicInterpreter(config=DraconicConfig(**limits), builtins={"range": range, "len": len})
+
+
+def test_conversions_of_unchecked_containers():
+    interpreter = _interpreter(max_output_len=1000)
+    setup = "t = tuple(range(300))\nd = {n: n for n in range(300)}\n"
+    for expr in ("str(t)", "f'{t}'", "'%s' % (t,)", "str(d.keys())", "f'{d.items()}'"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"{setup}return {expr}")
+    assert interpreter.execute("return str((1, 2)) + f'{(3,)}' + '%s' % ((4,),)") == "(1, 2)(3,)(4,)"
+
+
+def test_finally_cannot_swallow_limit_errors():
+    interpreter = _interpreter(max_const_len=1000)
+    for exit_ in ("continue", "break"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"for _ in range(3):\n    try:\n        x = [0] * 2000\n    finally:\n        {exit_}")
+    with utils.raises(IterableTooLong):
+        interpreter.execute("def f():\n    try:\n        x = [0] * 2000\n    finally:\n        return 1\nreturn f()")
+    # ordinary exceptions are still replaced by a return in finally, as in Python
+    assert interpreter.execute("def f():\n    try:\n        x = 1 / 0\n    finally:\n        return 1\nreturn f()") == 1
+
+
+def test_rejected_conversion_does_not_use_total_output_len():
+    config = DraconicConfig(max_output_len=100, max_total_output_len=300)
+    interpreter = DraconicInterpreter(config=config, builtins={"str": str, "range": range})
+    with utils.raises(IterableTooLong):
+        interpreter.execute("a = list(range(100))\nstr(a)")
+    interpreter._preflight = lambda: None  # keep the counter, as Avrae's ScriptingEvaluator does
+    assert interpreter.execute("return str([1, 2])") == "[1, 2]"
+
+
+def test_negative_list_multiplier_cannot_hide_size():
+    with utils.raises(IterableTooLong):
+        _interpreter(max_const_len=1000).execute(
+            "x = [0] * -(2 ** 60)\nx.append(0)\nfor _ in range(12):\n    x.extend(x)"
+        )
+
+
+def test_set_add_counts_element_size():
+    with utils.raises(IterableTooLong):
+        _interpreter(max_const_len=1000).execute("s = set()\nfor n in range(100):\n    s.add('x' * 90 + str(n))")
+
+
+def test_repr_len_counts_escapes():
+    interpreter = _interpreter(max_output_len=1000)
+    for value in ("'\\U000e0001' * 200", "'\\x00' * 300"):
+        with utils.raises(IterableTooLong):
+            interpreter.execute(f"return str([{value}])")
+
+
+def test_repeated_updates_do_not_accumulate_size():
+    interpreter = _interpreter(max_const_len=1000)
+    for loop in (
+        "d = {}\nfor n in range(3000):\n    d['k'] = n\n    d.clear()",
+        "d = {}\nfor n in range(3000):\n    d.update({'k': 'x' * 10})",
+        "d = {}\nfor n in range(3000):\n    d['k' + str(n % 5)] = 'v'\n    d.popitem()",
+        "s = set()\nfor n in range(3000):\n    s.add('x' * 10)\n    s.discard('x' * 10)",
+        "s = {'x' * 10}\nfor n in range(3000):\n    s.add('x' * 10)",
+        "s = set()\nfor n in range(3000):\n    s.update({'a', 'b'})\n    s.difference_update({'a'})",
+    ):
+        interpreter.execute(loop)
