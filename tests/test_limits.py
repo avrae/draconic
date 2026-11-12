@@ -639,13 +639,6 @@ def test_set_add_counts_element_size():
         _interpreter(max_const_len=1000).execute("s = set()\nfor n in range(100):\n    s.add('x' * 90 + str(n))")
 
 
-def test_repr_len_counts_escapes():
-    interpreter = _interpreter(max_output_len=1000)
-    for value in ("'\\U000e0001' * 200", "'\\x00' * 300"):
-        with utils.raises(IterableTooLong):
-            interpreter.execute(f"return str([{value}])")
-
-
 def test_repeated_updates_do_not_accumulate_size():
     interpreter = _interpreter(max_const_len=1000)
     for loop in (

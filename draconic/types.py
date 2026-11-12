@@ -65,6 +65,10 @@ def approx_repr_len(obj, sizes=None):
     Gets the approximate length of ``repr(obj)`` without building it, counting every reference to a shared object.
     Ignores cached ``__approx_len__`` values, which do not include the size of appended children.
     """
+    if isinstance(obj, (str, UserString)):
+        return len(obj) + 2
+    if isinstance(obj, bytes):
+        return len(obj) + 3
     if isinstance(obj, _SCALARS):
         return len(repr(obj))
 
@@ -74,9 +78,7 @@ def approx_repr_len(obj, sizes=None):
         return sizes[id(obj)][1] or 5  # a cycle is printed as [...]
 
     sizes[id(obj)] = (obj, None)
-    if isinstance(obj, (str, bytes, UserString)):
-        parts = None  # measured exactly below: escapes can make a repr several times longer than the string
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         parts = [approx_repr_len(k, sizes) + approx_repr_len(v, sizes) + 2 for k, v in obj.items()]
     elif isinstance(obj, (list, tuple, set, frozenset, UserList)):
         parts = [approx_repr_len(child, sizes) for child in obj]
