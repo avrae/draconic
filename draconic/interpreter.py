@@ -9,7 +9,7 @@ from .exceptions import *
 from .helpers import DraconicConfig, OperatorMixin, zip_star
 from .string import check_format_spec
 from .versions import PY_310
-from .types import approx_len_of, bound_method, check_output_len
+from .types import approx_len_of, bound_method, checked_str
 
 __all__ = ("SimpleInterpreter", "DraconicInterpreter")
 
@@ -234,10 +234,7 @@ class SimpleInterpreter(OperatorMixin):
         length = 0
         evaluated_values = []
         for n in node.values:
-            val = self._eval(n)
-            if not isinstance(val, str):
-                check_output_len(self._config, val)  # e.g. a tuple, whose repr is not checked by itself
-            val = str(val)
+            val = checked_str(self._config, self._eval(n))  # e.g. a tuple, whose repr is not checked by itself
             length += len(val)
             if length > self._config.max_const_len:
                 raise IterableTooLong(
@@ -250,7 +247,9 @@ class SimpleInterpreter(OperatorMixin):
         if node.format_spec:
             format_spec = str(self._eval(node.format_spec))
             check_format_spec(self._config, format_spec)
-            return self._str(format(self._eval(node.value), format_spec))
+            # checked before formatting: format(t, '') of a tuple or dict view builds its full repr
+            value = checked_str(self._config, self._eval(node.value), lambda v: format(v, format_spec))
+            return self._str(value)
         return self._eval(node.value)
 
 

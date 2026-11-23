@@ -650,3 +650,26 @@ def test_repeated_updates_do_not_accumulate_size():
         "s = set()\nfor n in range(3000):\n    s.update({'a', 'b'})\n    s.difference_update({'a'})",
     ):
         interpreter.execute(loop)
+
+
+def test_each_conversion_counts_once_toward_total_output_len():
+    size = len(repr(["x" * 10] * 30))
+    for expr in ("str(a)", "f'{a}'", "f'{a:}'", "'%s' % (a,)"):  # '%' is charged its arguments tuple
+        interpreter = _interpreter()
+        interpreter.execute(f"a = ['x' * 10] * 30\nreturn {expr}")
+        assert size <= interpreter._config.output_len_used <= size + 2, expr
+
+
+def test_format_spec_is_checked_before_formatting():
+    # a tuple of references to a list that grows afterwards has a large repr that no container check sees
+    with utils.raises(IterableTooLong):
+        _interpreter(max_output_len=10000).execute("a = ['x']\nt = (a,) * 10\na.extend(['y' * 100] * 20)\nf'{t:}'")
+
+
+def test_repr_length_counts_escapes():
+    from draconic.types import approx_repr_len
+
+    for value in ("\U000e0001" * 50, "\x00" * 50, "a\nb\t" * 20, 'it\'s "quoted" \\', "café", b"\x00\xff" * 50, b"ok"):
+        assert approx_repr_len(value) == len(repr(value)), value
+    with utils.raises(IterableTooLong):
+        _interpreter(max_output_len=1000).execute("str(['\\x00' * 300])")

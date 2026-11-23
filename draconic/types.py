@@ -7,13 +7,24 @@ from .exceptions import *
 from .string import JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
 from .versions import PY_39
 
-__all__ = ("safe_list", "safe_dict", "safe_set", "safe_str", "approx_len_of", "approx_repr_len", "check_output_len")
+__all__ = (
+    "safe_list",
+    "safe_dict",
+    "safe_set",
+    "safe_str",
+    "approx_len_of",
+    "approx_repr_len",
+    "check_output_len",
+    "checked_str",
+    "OutputBuffer",
+)
 
 _sentinel = object()
 
 
 # ---- size helpers ----
 _SCALARS = (int, float, complex, type(None))
+_SCALAR_TYPES = frozenset(_SCALARS) | {bool}
 
 
 # Both helpers memoize each distinct object's size in `sizes` (id -> (obj, size)), so an object referenced
@@ -38,12 +49,17 @@ def approx_len_of(obj, sizes=None):
     size = op.length_hint(obj)
 
     try:
-        obj_iter = iter(obj.items() if isinstance(obj, dict) else obj)
+        # a UserList's inherited __iter__ calls __getitem__ per item, so walk its backing list directly
+        obj_iter = iter(obj.items() if isinstance(obj, dict) else obj.data if isinstance(obj, UserList) else obj)
     except TypeError:  # object is not iterable
         pass
     else:
         for child in obj_iter:
-            if isinstance(child, _SCALARS):
+            child_type = type(child)
+            if child_type is str or child_type is bytes:  # exact types first; subclasses take the checks below
+                size += len(child)
+                continue
+            if child_type in _SCALAR_TYPES or isinstance(child, _SCALARS):
                 continue
             if isinstance(child, (str, bytes, UserString)):
                 size += len(child)
@@ -60,15 +76,24 @@ def approx_len_of(obj, sizes=None):
     return size
 
 
+def _str_repr_len(s):
+    """len(repr(s)). Printable ASCII is counted without building the repr; anything repr may escape (up to 10x,
+    e.g. '\\U000e0001') is measured exactly, which is bounded because strings are at most max_const_len long."""
+    if s.isascii() and s.isprintable():
+        quote_escapes = s.count("'") if "'" in s and '"' in s else 0
+        return len(s) + 2 + s.count("\\") + quote_escapes
+    return len(repr(s))
+
+
 def approx_repr_len(obj, sizes=None):
     """
     Gets the approximate length of ``repr(obj)`` without building it, counting every reference to a shared object.
     Ignores cached ``__approx_len__`` values, which do not include the size of appended children.
     """
     if isinstance(obj, (str, UserString)):
-        return len(obj) + 2
+        return _str_repr_len(obj.data if isinstance(obj, UserString) else obj)
     if isinstance(obj, bytes):
-        return len(obj) + 3
+        return len(repr(obj))  # escapes can make it up to 4x the length; bytes are at most max_const_len long
     if isinstance(obj, _SCALARS):
         return len(repr(obj))
 
@@ -164,16 +189,55 @@ def check_output_len(config, obj):
 _repr_guard = threading.local()
 
 
-def _guarded_repr(config, obj, base_repr):
-    """Checks the output length once per top-level conversion; nested conversions are covered by that check."""
+def _guarded_repr(config, obj, convert):
+    """
+    Checks the output length once per top-level conversion; nested conversions (e.g. the repr of each list inside
+    a tuple) are covered by that check, so each conversion is charged to the per-run total exactly once.
+    """
     if getattr(_repr_guard, "active", False):
-        return base_repr(obj)
+        return convert(obj)
     check_output_len(config, obj)
     _repr_guard.active = True
     try:
-        return base_repr(obj)
+        return convert(obj)
     finally:
         _repr_guard.active = False
+
+
+def checked_str(config, obj, convert=None):
+    """str(obj) (or convert(obj)) for any value, checked against the output limits and charged once."""
+    if convert is None:
+        if isinstance(obj, _real_str):
+            return obj
+        convert = _real_str
+    return _guarded_repr(config, obj, convert)
+
+
+class OutputBuffer:
+    """
+    A write-only text stream for serializers. It raises as soon as its contents would exceed config.max_output_len
+    or this run's config.max_total_output_len, and charges what is written to the total, so a serializer stops at
+    the limit instead of building the whole output first, whatever its escaping or indentation.
+    """
+
+    def __init__(self, config):
+        self._config = config
+        self._parts = []
+        self._len = 0
+
+    def write(self, text):
+        size, config = len(text), self._config
+        if self._len + size > config.max_output_len or config.output_len_used + size > config.max_total_output_len:
+            _raise_in_context(IterableTooLong, "This value is too large to convert to a string")
+        config.output_len_used += size
+        self._len += size
+        self._parts.append(text)
+
+    def flush(self):
+        pass
+
+    def getvalue(self):
+        return "".join(self._parts)
 
 
 # ---- types ----
@@ -442,14 +506,20 @@ def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
     class str(UserString, _real_str):
-        def __init__(self, seq):
+        # the value is converted once, in __new__ (the base str needs it), and checked and charged once there
+        def __new__(cls, seq):
             if isinstance(seq, UserString):
-                self.data = seq.data[:]
+                value = seq.data
             elif isinstance(seq, _real_str):
-                self.data = seq
+                value = seq
             else:
-                check_output_len(config, seq)  # str() of a tuple, dict view, etc. is not checked by its own repr
-                self.data = _real_str(seq)
+                value = checked_str(config, seq)
+            self = _real_str.__new__(cls, value)
+            self.data = value
+            return self
+
+        def __init__(self, seq):  # data is set in __new__
+            pass
 
         def center(self, width, *args):
             if width > config.max_const_len:
@@ -571,7 +641,6 @@ def safe_str(config):
                 if new_len_bound > config.max_const_len:
                     _raise_in_context(IterableTooLong, "This str is too large")
 
-            check_output_len(config, values)
-            return _real_str.__mod__(self.data, values)
+            return checked_str(config, values, lambda vals: _real_str.__mod__(self.data, vals))
 
     return str
