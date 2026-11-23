@@ -1,53 +1,243 @@
 import collections.abc
 import operator as op
+import threading
 from collections import UserList, UserString
 
 from .exceptions import *
 from .string import JoinProxy, PRINTF_TEMPLATE_RE, TranslateTableProxy
 from .versions import PY_39
 
-__all__ = ("safe_list", "safe_dict", "safe_set", "safe_str", "approx_len_of")
+__all__ = (
+    "safe_list",
+    "safe_dict",
+    "safe_set",
+    "safe_str",
+    "approx_len_of",
+    "approx_repr_len",
+    "check_output_len",
+    "checked_str",
+    "OutputBuffer",
+)
 
 _sentinel = object()
 
 
-# ---- size helper ----
-def approx_len_of(obj, visited=None):
-    """Gets the approximate size of an object (including recursive objects)."""
+# ---- size helpers ----
+_SCALARS = (int, float, complex, type(None))
+_SCALAR_TYPES = frozenset(_SCALARS) | {bool}
+
+
+# Both helpers memoize each distinct object's size in `sizes` (id -> (obj, size)), so an object referenced
+# many times is measured once but counted at every reference: linear in distinct objects + references.
+# The tuple keeps obj alive so its id can't be reused mid-walk (e.g. a freed dict.items() tuple).
+# A size of None marks an object still being measured, i.e. a reference to it is a cycle.
+def approx_len_of(obj, sizes=None):
+    """Gets the approximate size of an object, counting every reference to a shared object."""
     if isinstance(obj, (str, bytes, UserString)):
         return len(obj)
+
+    if isinstance(obj, _SCALARS):
+        return 0
 
     if hasattr(obj, "__approx_len__"):
         return obj.__approx_len__
 
-    if visited is None:
-        visited = {id(obj): obj}
+    if sizes is None:
+        sizes = {}
 
+    sizes[id(obj)] = (obj, None)
     size = op.length_hint(obj)
 
-    if isinstance(obj, dict):
-        obj = obj.items()
-
     try:
-        obj_iter = iter(obj)
+        # a UserList's inherited __iter__ calls __getitem__ per item, so walk its backing list directly
+        obj_iter = iter(obj.items() if isinstance(obj, dict) else obj.data if isinstance(obj, UserList) else obj)
     except TypeError:  # object is not iterable
         pass
     else:
-        # visited is keyed by id (linear membership, vs a value-based `in` scan that is quadratic
-        # and collapses distinct-but-equal siblings); it maps id -> object so each visited object
-        # stays alive, otherwise a freed child (e.g. a dict.items() tuple) could have its id reused.
         for child in obj_iter:
-            if id(child) in visited:
+            child_type = type(child)
+            if child_type is str or child_type is bytes:  # exact types first; subclasses take the checks below
+                size += len(child)
                 continue
-            visited[id(child)] = child
-            size += approx_len_of(child, visited)
+            if child_type in _SCALAR_TYPES or isinstance(child, _SCALARS):
+                continue
+            if isinstance(child, (str, bytes, UserString)):
+                size += len(child)
+                continue
+            seen = sizes.get(id(child))
+            size += approx_len_of(child, sizes) if seen is None else seen[1] or 0
 
+    sizes[id(obj)] = (obj, size)
     try:
         setattr(obj, "__approx_len__", size)
     except (AttributeError, TypeError):
         pass
 
     return size
+
+
+def _str_repr_len(s):
+    """len(repr(s)). Printable ASCII is counted without building the repr; anything repr may escape (up to 10x,
+    e.g. '\\U000e0001') is measured exactly, which is bounded because strings are at most max_const_len long."""
+    if s.isascii() and s.isprintable():
+        quote_escapes = s.count("'") if "'" in s and '"' in s else 0
+        return len(s) + 2 + s.count("\\") + quote_escapes
+    return len(repr(s))
+
+
+def approx_repr_len(obj, sizes=None):
+    """
+    Gets the approximate length of ``repr(obj)`` without building it, counting every reference to a shared object.
+    Ignores cached ``__approx_len__`` values, which do not include the size of appended children.
+    """
+    if isinstance(obj, (str, UserString)):
+        return _str_repr_len(obj.data if isinstance(obj, UserString) else obj)
+    if isinstance(obj, bytes):
+        return len(repr(obj))  # escapes can make it up to 4x the length; bytes are at most max_const_len long
+    if isinstance(obj, _SCALARS):
+        return len(repr(obj))
+
+    if sizes is None:
+        sizes = {}
+    elif id(obj) in sizes:
+        return sizes[id(obj)][1] or 5  # a cycle is printed as [...]
+
+    sizes[id(obj)] = (obj, None)
+    if isinstance(obj, dict):
+        parts = [approx_repr_len(k, sizes) + approx_repr_len(v, sizes) + 2 for k, v in obj.items()]
+    elif isinstance(obj, (list, tuple, set, frozenset, UserList)):
+        parts = [approx_repr_len(child, sizes) for child in obj]
+    else:
+        parts = None
+
+    size = len(repr(obj)) if parts is None else 2 + sum(parts) + 2 * max(len(parts) - 1, 0)
+    sizes[id(obj)] = (obj, size)
+    return size
+
+
+def _replace_len(self, old, new, count=-1):
+    occurrences = self.count(old) if count < 0 else min(count, self.count(old))
+    return len(self) + occurrences * (len(new) - len(old))
+
+
+# int and bytes methods whose output can be larger than their input, mapped to the output size of a call
+_GROWING_METHODS = {
+    (int, "to_bytes"): lambda self, length=1, *_, **__: length,
+    (bytes, "center"): lambda self, width, *_: width,
+    (bytes, "ljust"): lambda self, width, *_: width,
+    (bytes, "rjust"): lambda self, width, *_: width,
+    (bytes, "zfill"): lambda self, width: width,
+    (bytes, "expandtabs"): lambda self, tabsize=8: len(self) + self.count(b"\t") * tabsize,
+    (bytes, "replace"): _replace_len,
+    (bytes, "join"): lambda self, seq: len(self) * len(seq) + sum(approx_len_of(part) for part in seq),
+}
+
+
+def bound_method(config, obj, attr, method):
+    """Wraps int and bytes methods so they raise instead of building output longer than config.max_const_len."""
+    cls = obj if isinstance(obj, type) else type(obj)  # int.to_bytes(x, ...) is unbound, (x).to_bytes(...) is bound
+    base = next((b for b in (int, bytes) if issubclass(cls, b)), None)
+    output_len = _GROWING_METHODS.get((base, attr))
+    if output_len is None:
+        return method
+
+    def checked(*args, **kwargs):
+        if attr == "join" and args:  # consume the iterable so it can be both measured and joined
+            args = (*args[:-1], list(args[-1]))
+        self_and_args = args if cls is obj else (obj, *args)
+        if output_len(*self_and_args, **kwargs) > config.max_const_len:
+            _raise_in_context(IterableTooLong, "This value is too large")
+        return method(*args, **kwargs)
+
+    return checked
+
+
+_TUPLE_CACHE_SIZE = 64
+
+
+def _item_len(config, item):
+    """
+    approx_len_of(item) for an item added to or removed from a container. Tuples and frozensets can't cache their own
+    size, so recent ones are memoized: otherwise appending and popping one large tuple re-measures it every time.
+    The cache is bounded because it keeps its objects alive.
+    """
+    if isinstance(item, _SCALARS):
+        return 0
+    if not isinstance(item, (tuple, frozenset)):
+        return approx_len_of(item)
+    cache = config.tuple_lens
+    entry = cache.get(id(item))
+    if entry is None:
+        if len(cache) >= _TUPLE_CACHE_SIZE:
+            del cache[next(iter(cache))]
+        entry = cache[id(item)] = (item, approx_len_of(item))
+    return entry[1]
+
+
+def check_output_len(config, obj):
+    """
+    Raises if converting obj to a string would exceed config.max_output_len, or push this run's total past
+    config.max_total_output_len. The total catches wrappers that are not checked themselves (e.g. a tuple of
+    references to one list), whose contents are checked one at a time.
+    """
+    size = approx_repr_len(obj)
+    if size > config.max_output_len or config.output_len_used + size > config.max_total_output_len:
+        _raise_in_context(IterableTooLong, "This value is too large to convert to a string")
+    config.output_len_used += size  # only conversions that happen count toward the total
+
+
+_repr_guard = threading.local()
+
+
+def _guarded_repr(config, obj, convert):
+    """
+    Checks the output length once per top-level conversion; nested conversions (e.g. the repr of each list inside
+    a tuple) are covered by that check, so each conversion is charged to the per-run total exactly once.
+    """
+    if getattr(_repr_guard, "active", False):
+        return convert(obj)
+    check_output_len(config, obj)
+    _repr_guard.active = True
+    try:
+        return convert(obj)
+    finally:
+        _repr_guard.active = False
+
+
+def checked_str(config, obj, convert=None):
+    """str(obj) (or convert(obj)) for any value, checked against the output limits and charged once."""
+    if convert is None:
+        if isinstance(obj, _real_str):
+            return obj
+        convert = _real_str
+    return _guarded_repr(config, obj, convert)
+
+
+class OutputBuffer:
+    """
+    A write-only text stream for serializers. It raises as soon as its contents would exceed config.max_output_len
+    or this run's config.max_total_output_len, and charges what is written to the total, so a serializer stops at
+    the limit instead of building the whole output first, whatever its escaping or indentation.
+    """
+
+    def __init__(self, config):
+        self._config = config
+        self._parts = []
+        self._len = 0
+
+    def write(self, text):
+        size, config = len(text), self._config
+        if self._len + size > config.max_output_len or config.output_len_used + size > config.max_total_output_len:
+            _raise_in_context(IterableTooLong, "This value is too large to convert to a string")
+        config.output_len_used += size
+        self._len += size
+        self._parts.append(text)
+
+    def flush(self):
+        pass
+
+    def getvalue(self):
+        return "".join(self._parts)
 
 
 # ---- types ----
@@ -59,11 +249,36 @@ def safe_list(config):
             super().__init__(*args, **kwargs)
             self.__approx_len__ = approx_len_of(self)
 
-        def append(self, obj):
-            if approx_len_of(self) + 1 > config.max_const_len:
+        def _len_after(self, delta):
+            """The size after a change of delta, raising before the change if it would be too long."""
+            new_len = approx_len_of(self) + delta
+            if new_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This list is too long")
-            super().append(obj)
-            self.__approx_len__ += 1
+            return max(new_len, 0)
+
+        # adding an item counts its own size too, like literals, comprehensions, and extend
+        def append(self, obj):
+            # inlined _len_after with a scalar fast path: append in a loop is the most common list operation
+            new_len = self.__approx_len__ + 1 + (0 if isinstance(obj, _SCALARS) else _item_len(config, obj))
+            if new_len > config.max_const_len:
+                _raise_in_context(IterableTooLong, "This list is too long")
+            self.data.append(obj)
+            self.__approx_len__ = new_len
+
+        def insert(self, i, obj):
+            new_len = self._len_after(_item_len(config, obj) + 1)
+            super().insert(i, obj)
+            self.__approx_len__ = new_len
+
+        def __setitem__(self, i, item):
+            if isinstance(i, slice):
+                item = list(item)  # consume the iterable so it can be both measured and assigned
+            if isinstance(i, slice):
+                new_len = self._len_after(approx_len_of(item) - approx_len_of(self.data[i]))
+            else:
+                new_len = self._len_after(_item_len(config, item) - _item_len(config, self.data[i]))
+            super().__setitem__(i, item)
+            self.__approx_len__ = new_len
 
         def extend(self, iterable):
             other_len = approx_len_of(iterable)
@@ -74,12 +289,12 @@ def safe_list(config):
 
         def pop(self, i=-1):
             retval = super().pop(i)
-            self.__approx_len__ -= 1
+            self.__approx_len__ = self._len_after(-_item_len(config, retval) - 1)
             return retval
 
         def remove(self, item):
             super().remove(item)
-            self.__approx_len__ -= 1
+            self.__approx_len__ = self._len_after(-_item_len(config, item) - 1)
 
         def clear(self):
             super().clear()
@@ -90,7 +305,7 @@ def safe_list(config):
             # data and approx len (JIRA-54)
             new = SafeList()
             new.data = self.data * n
-            new.__approx_len__ = self.__approx_len__ * n
+            new.__approx_len__ = self.__approx_len__ * max(n, 0)  # a negative n gives an empty list
             return new
 
         def __add__(self, other):
@@ -104,6 +319,9 @@ def safe_list(config):
             new.data = (other.data if isinstance(other, UserList) else list(other)) + self.data
             new.__approx_len__ = approx_len_of(other) + self.__approx_len__
             return new
+
+        def __repr__(self):
+            return _guarded_repr(config, self, UserList.__repr__)
 
     return SafeList
 
@@ -140,48 +358,64 @@ def safe_set(config):
 
         # difference not reimplemented as it cannot grow the set and has no cheap approximation for len
 
+        # set updates count only the elements they add or remove, so repeated updates don't accumulate size
         def update(self, *s):
-            other_lens = sum(approx_len_of(other) for other in s)
-            if approx_len_of(self) + other_lens > config.max_const_len:
+            new = {element for other in s for element in other if element not in self}
+            new_len = approx_len_of(self) + sum(1 + _item_len(config, element) for element in new)
+            if new_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
-            super().update(*s)
-            self.__approx_len__ += other_lens
+            super().update(new)
+            self.__approx_len__ = new_len
+
+        def difference_update(self, *s):
+            removed = {element for other in s for element in other if element in self}
+            super().difference_update(removed)
+            self.__approx_len__ = max(self.__approx_len__ - sum(1 + _item_len(config, e) for e in removed), 0)
 
         def intersection_update(self, *s):
             if any(approx_len_of(other) > config.max_const_len for other in s):
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().intersection_update(*s)
-            self.__approx_len__ = min(self.__approx_len__, *(approx_len_of(other) for other in s))
+            self._recount()
 
         def symmetric_difference_update(self, s):
             total_approx = approx_len_of(self) + approx_len_of(s)
             if total_approx > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().symmetric_difference_update(s)
-            self.__approx_len__ = total_approx
+            self._recount()
 
-        # difference_update not reimplemented as it cannot grow the set and has no cheap approximation for len
+        def _recount(self):  # after operations that already walk the whole set
+            self.__approx_len__ = sum(1 + _item_len(config, element) for element in self)
 
         def add(self, element):
-            if approx_len_of(self) + 1 > config.max_const_len:
+            if element in self:
+                return
+            new_len = approx_len_of(self) + 1 + _item_len(config, element)
+            if new_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This set is too large")
             super().add(element)
-            self.__approx_len__ += 1
+            self.__approx_len__ = new_len
 
         def pop(self):
             retval = super().pop()
-            self.__approx_len__ -= 1
+            self.__approx_len__ = max(self.__approx_len__ - 1 - _item_len(config, retval), 0)
             return retval
 
         def remove(self, element):
             super().remove(element)
-            self.__approx_len__ -= 1
+            self.__approx_len__ = max(self.__approx_len__ - 1 - _item_len(config, element), 0)
 
-        # discard not reimplemented as the discarded element may not be a member
+        def discard(self, element):
+            if element in self:
+                self.remove(element)
 
         def clear(self):
             super().clear()
             self.__approx_len__ = 0
+
+        def __repr__(self):
+            return _guarded_repr(config, self, set.__repr__)
 
     return SafeSet
 
@@ -196,31 +430,54 @@ def safe_dict(config):
             if other_dict is None:
                 other_dict = {}
 
-            other_lens = approx_len_of(other_dict) + approx_len_of(kvs)
-            if approx_len_of(self) + other_lens > config.max_const_len:
+            items = dict(other_dict, **kvs)
+            new_len = approx_len_of(self) + sum(self._set_delta(key, value) for key, value in items.items())
+            if new_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This dict is too large")
 
-            super().update(other_dict, **kvs)
-            self.__approx_len__ += other_lens
+            super().update(items)
+            self.__approx_len__ = max(new_len, 0)
+
+        def _entry_len(self, key):
+            return _item_len(config, key) + _item_len(config, self[key]) + 1
+
+        def _set_delta(self, key, value):
+            """A new key counts its own size; overwriting a key swaps the old value's size for the new one."""
+            if key in self:
+                return _item_len(config, value) - _item_len(config, self[key])
+            return _item_len(config, key) + _item_len(config, value) + 1
 
         def __setitem__(self, key, value):
-            other_len = approx_len_of(value)
-            if approx_len_of(self) + other_len > config.max_const_len:
+            delta = self._set_delta(key, value)
+            new_len = approx_len_of(self) + delta
+            if new_len > config.max_const_len:
                 _raise_in_context(IterableTooLong, "This dict is too large")
-            self.__approx_len__ += other_len
-            return super().__setitem__(key, value)
+            super().__setitem__(key, value)
+            self.__approx_len__ = max(new_len, 0)
+
+        def setdefault(self, key, default=None):
+            if key not in self:
+                self[key] = default  # dict.setdefault would skip the size check in __setitem__
+            return self[key]
 
         def pop(self, k, default=_sentinel):
-            if default is not _sentinel:
-                retval = super().pop(k, default)
-            else:
-                retval = super().pop(k)
-                self.__approx_len__ -= 1
-            return retval
+            if k in self:
+                self.__approx_len__ = max(self.__approx_len__ - self._entry_len(k), 0)
+            return super().pop(k) if default is _sentinel else super().pop(k, default)
 
         def __delitem__(self, key):
+            entry_len = self._entry_len(key)
             super().__delitem__(key)
-            self.__approx_len__ -= 1
+            self.__approx_len__ = max(self.__approx_len__ - entry_len, 0)
+
+        def popitem(self):
+            key, value = super().popitem()
+            self.__approx_len__ = max(self.__approx_len__ - _item_len(config, key) - _item_len(config, value) - 1, 0)
+            return key, value
+
+        def clear(self):
+            super().clear()
+            self.__approx_len__ = 0
 
         def __getattr__(self, attr):
             try:
@@ -236,6 +493,9 @@ def safe_dict(config):
 
                 return SafeDict(super().__or__(other))
 
+        def __repr__(self):
+            return _guarded_repr(config, self, dict.__repr__)
+
     return SafeDict
 
 
@@ -246,13 +506,20 @@ def safe_str(config):
     # noinspection PyShadowingBuiltins, PyPep8Naming
     # naming it SafeStr would break typeof backward compatibility :(
     class str(UserString, _real_str):
-        def __init__(self, seq):
+        # the value is converted once, in __new__ (the base str needs it), and checked and charged once there
+        def __new__(cls, seq):
             if isinstance(seq, UserString):
-                self.data = seq.data[:]
+                value = seq.data
             elif isinstance(seq, _real_str):
-                self.data = seq
+                value = seq
             else:
-                self.data = _real_str(seq)
+                value = checked_str(config, seq)
+            self = _real_str.__new__(cls, value)
+            self.data = value
+            return self
+
+        def __init__(self, seq):  # data is set in __new__
+            pass
 
         def center(self, width, *args):
             if width > config.max_const_len:
@@ -374,6 +641,6 @@ def safe_str(config):
                 if new_len_bound > config.max_const_len:
                     _raise_in_context(IterableTooLong, "This str is too large")
 
-            return _real_str.__mod__(self.data, values)
+            return checked_str(config, values, lambda vals: _real_str.__mod__(self.data, vals))
 
     return str
